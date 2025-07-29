@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "timestamp": "2025-07-29T12:52:41.585828+00:00",
+  "tokens": {
+    "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+      "holders": 8201961,
+      "liquidity": 0,
+      "top10_concentration": 20,
+      "is_verified": true,
+      "contract_age_days": 2800,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c": {
+      "holders": 0,
+      "liquidity": 0,
+      "top10_concentration": 40,
+      "is_verified": false,
+      "contract_age_days": 0,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0xc944e90c64b2c07662a292be6244bdf05cda44a7": {
+      "holders": 173191,
+      "liquidity": 0,
+      "top10_concentration": 30,
+      "is_verified": true,
+      "contract_age_days": 1688,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0x57e114b691db790c35207b2e685d4a43181e6061": {
+      "holders": 72568,
+      "liquidity": 0,
+      "top10_concentration": 40,
+      "is_verified": true,
+      "contract_age_days": 510,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0x514910771af9ca656af840dff83e8264ecf986ca": {
+      "holders": 777120,
+      "liquidity": 0,
+      "top10_concentration": 20,
+      "is_verified": true,
+      "contract_age_days": 2872,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0x8f187aa05619a017077f5308904739877ce9ea21": {
+      "holders": 0,
+      "liquidity": 0,
+      "top10_concentration": 40,
+      "is_verified": false,
+      "contract_age_days": 0,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2": {
+      "holders": 125290,
+      "liquidity": 0,
+      "top10_concentration": 30,
+      "is_verified": true,
+      "contract_age_days": 1798,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0x6b175474e89094c44da98b954eedeac495271d0f": {
+      "holders": 530093,
+      "liquidity": 0,
+      "top10_concentration": 20,
+      "is_verified": true,
+      "contract_age_days": 2084,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    },
+    "0x3845badade8e6dff049820680d1f14bd3903a5d0": {
+      "holders": 207681,
+      "liquidity": 0,
+      "top10_concentration": 20,
+      "is_verified": true,
+      "contract_age_days": 2099,
+      "market_cap": 0,
+      "volume_24h": 0,
+      "price_usd": 0
+    }
+  }
+}

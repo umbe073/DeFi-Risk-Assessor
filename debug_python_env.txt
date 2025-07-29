@@ -1,0 +1,2 @@
+[DEBUG] Python executable: /Library/Frameworks/Python.framework/Versions/3.13/bin/python3
+[DEBUG] sys.path: ['', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python313.zip', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/lib-dynload', '/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages']

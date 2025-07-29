@@ -1,0 +1,336 @@
+[
+  {
+    "token": "0x57e114B691Db790C35207b2e685D4A43181e6061",
+    "chain": "eth",
+    "symbol": "ENA",
+    "risk_score": 104.2,
+    "risk_category": "High Risk",
+    "red_flags": [
+      "mica_no_whitepaper",
+      "low_liquidity",
+      "unverified_contract",
+      "high_concentration"
+    ],
+    "is_stablecoin": false,
+    "eu_compliance_status": "Limited Compliance (No Whitepaper)",
+    "key_metrics": {
+      "market_cap": 3433790955,
+      "volume_24h": 2594670580,
+      "holders": 0,
+      "liquidity": 638121
+    },
+    "component_scores": {
+      "industry_impact": 2,
+      "tech_innovation": 5,
+      "whitepaper_quality": 8,
+      "roadmap_adherence": 4,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 6,
+      "global_reach": 5,
+      "code_security": 9,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 7,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+    "chain": "bsc",
+    "symbol": "WBNB",
+    "risk_score": 68.7,
+    "risk_category": "Medium Risk",
+    "red_flags": [
+      "mica_no_whitepaper",
+      "high_concentration"
+    ],
+    "is_stablecoin": false,
+    "eu_compliance_status": "Limited Compliance (No Whitepaper)",
+    "key_metrics": {
+      "market_cap": 1025914720,
+      "volume_24h": 495167897,
+      "holders": 0,
+      "liquidity": 202046085
+    },
+    "component_scores": {
+      "industry_impact": 2,
+      "tech_innovation": 1,
+      "whitepaper_quality": 8,
+      "roadmap_adherence": 6,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 6,
+      "global_reach": 5,
+      "code_security": 3,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 4,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0x8f187aA05619a017077f5308904739877ce9eA21",
+    "chain": "uni",
+    "symbol": "UNI",
+    "risk_score": 125.7,
+    "risk_category": "Extreme Risk",
+    "red_flags": [
+      "mica_no_whitepaper",
+      "low_liquidity",
+      "unverified_contract",
+      "high_concentration"
+    ],
+    "is_stablecoin": false,
+    "eu_compliance_status": "Limited Compliance (No Whitepaper)",
+    "key_metrics": {
+      "market_cap": 0,
+      "volume_24h": 0,
+      "holders": 0,
+      "liquidity": 0
+    },
+    "component_scores": {
+      "industry_impact": 8,
+      "tech_innovation": 10,
+      "whitepaper_quality": 10,
+      "roadmap_adherence": 10,
+      "business_model": 7,
+      "team_expertise": 10,
+      "management_strategy": 7,
+      "global_reach": 7,
+      "code_security": 9,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 6,
+      "marketing_demand": 10,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0xc944E90C64B2c07662A292be6244BDf05Cda44a7",
+    "chain": "eth",
+    "symbol": "GRT",
+    "risk_score": 80.9,
+    "risk_category": "Medium Risk",
+    "red_flags": [
+      "mica_no_whitepaper",
+      "low_liquidity",
+      "high_concentration"
+    ],
+    "is_stablecoin": false,
+    "eu_compliance_status": "Limited Compliance (No Whitepaper)",
+    "key_metrics": {
+      "market_cap": 1014167719,
+      "volume_24h": 59636118,
+      "holders": 0,
+      "liquidity": 106023
+    },
+    "component_scores": {
+      "industry_impact": 2,
+      "tech_innovation": 1,
+      "whitepaper_quality": 8,
+      "roadmap_adherence": 6,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 7,
+      "global_reach": 5,
+      "code_security": 3,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 3,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0x6b175474e89094c44da98b954eedeac495271d0f",
+    "chain": "eth",
+    "symbol": "DAI",
+    "risk_score": 130.9,
+    "risk_category": "Extreme Risk",
+    "red_flags": [
+      "eu_unlicensed_stablecoin",
+      "low_liquidity",
+      "high_concentration"
+    ],
+    "is_stablecoin": true,
+    "eu_compliance_status": "Non-Compliant (Unlicensed Stablecoin)",
+    "key_metrics": {
+      "market_cap": 3714408367,
+      "volume_24h": 150357588,
+      "holders": 0,
+      "liquidity": 999769
+    },
+    "component_scores": {
+      "industry_impact": 2,
+      "tech_innovation": 1,
+      "whitepaper_quality": 8,
+      "roadmap_adherence": 6,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 7,
+      "global_reach": 5,
+      "code_security": 3,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 3,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "chain": "eth",
+    "symbol": "USDT",
+    "risk_score": 130.5,
+    "risk_category": "Extreme Risk",
+    "red_flags": [
+      "eu_unlicensed_stablecoin",
+      "low_liquidity",
+      "high_concentration"
+    ],
+    "is_stablecoin": true,
+    "eu_compliance_status": "Non-Compliant (Unlicensed Stablecoin)",
+    "key_metrics": {
+      "market_cap": 163061174680,
+      "volume_24h": 173341481143,
+      "holders": 0,
+      "liquidity": 999900
+    },
+    "component_scores": {
+      "industry_impact": 2,
+      "tech_innovation": 1,
+      "whitepaper_quality": 7,
+      "roadmap_adherence": 6,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 6,
+      "global_reach": 5,
+      "code_security": 3,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 5,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+    "chain": "eth",
+    "symbol": "LINK",
+    "risk_score": 68.2,
+    "risk_category": "Medium Risk",
+    "red_flags": [
+      "mica_no_whitepaper",
+      "high_concentration"
+    ],
+    "is_stablecoin": false,
+    "eu_compliance_status": "Limited Compliance (No Whitepaper)",
+    "key_metrics": {
+      "market_cap": 12071938453,
+      "volume_24h": 760998180,
+      "holders": 0,
+      "liquidity": 18570000
+    },
+    "component_scores": {
+      "industry_impact": 2,
+      "tech_innovation": 1,
+      "whitepaper_quality": 7,
+      "roadmap_adherence": 6,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 7,
+      "global_reach": 5,
+      "code_security": 3,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 3,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0x3845badade8e6dff049820680d1f14bd3903a5d0",
+    "chain": "eth",
+    "symbol": "SAND",
+    "risk_score": 83.9,
+    "risk_category": "Medium Risk",
+    "red_flags": [
+      "mica_no_whitepaper",
+      "low_liquidity",
+      "high_concentration"
+    ],
+    "is_stablecoin": false,
+    "eu_compliance_status": "Limited Compliance (No Whitepaper)",
+    "key_metrics": {
+      "market_cap": 727214093,
+      "volume_24h": 68137709,
+      "holders": 0,
+      "liquidity": 304745
+    },
+    "component_scores": {
+      "industry_impact": 3,
+      "tech_innovation": 1,
+      "whitepaper_quality": 10,
+      "roadmap_adherence": 7,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 7,
+      "global_reach": 5,
+      "code_security": 3,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 3,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  },
+  {
+    "token": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+    "chain": "eth",
+    "symbol": "SUSHI",
+    "risk_score": 123.7,
+    "risk_category": "Extreme Risk",
+    "red_flags": [
+      "eu_regulatory_issues",
+      "mica_no_whitepaper",
+      "low_liquidity",
+      "high_concentration"
+    ],
+    "is_stablecoin": false,
+    "eu_compliance_status": "Non-Compliant (Regulatory Issues)",
+    "key_metrics": {
+      "market_cap": 167177202,
+      "volume_24h": 56830007,
+      "holders": 0,
+      "liquidity": 877563
+    },
+    "component_scores": {
+      "industry_impact": 3,
+      "tech_innovation": 1,
+      "whitepaper_quality": 10,
+      "roadmap_adherence": 7,
+      "business_model": 5,
+      "team_expertise": 10,
+      "management_strategy": 6,
+      "global_reach": 5,
+      "code_security": 3,
+      "dev_activity": 8,
+      "aml_data": 7,
+      "compliance_data": 7,
+      "market_dynamics": 4,
+      "marketing_demand": 5,
+      "esg_impact": 10
+    }
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "0xdac17f958d2ee523a2206206994597c13d831ec7": {"symbol": "USDT", "name": "Tether USDt"},
+  "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c": {"symbol": "WBNB", "name": "Wrapped BNB"},
+  "0xc944e90c64b2c07662a292be6244bdf05cda44a7": {"symbol": "GRT", "name": "The Graph"},
+  "0x57e114b691db790c35207b2e685d4a43181e6061": {"symbol": "ENA", "name": "Ethena"},
+  "0x514910771af9ca656af840dff83e8264ecf986ca": {"symbol": "LINK", "name": "Chainlink"},
+  "0x8f187aa05619a017077f5308904739877ce9ea21": {"symbol": "UNI", "name": "Uniswap (Unichain)"},
+  "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2": {"symbol": "SUSHI", "name": "Sushi"},
+  "0x6b175474e89094c44da98b954eedeac495271d0f": {"symbol": "DAI", "name": "Dai"},
+  "0x3845badade8e6dff049820680d1f14bd3903a5d0": {"symbol": "SAND", "name": "The Sandbox"}
+} 

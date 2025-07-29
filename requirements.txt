@@ -1,0 +1,22 @@
+# DeFi Token Risk Assessment Tool - Full Requirements
+# Install with: pip install -r requirements.txt
+
+# --- Data Analysis & Processing ---
+pandas           # DataFrames, CSV/Excel handling
+numpy            # Numerical operations
+
+# --- HTTP & API Requests ---
+requests         # HTTP requests to APIs
+urllib3          # Underlying HTTP library for requests
+python-dotenv    # Load environment variables from .env files
+
+diskcache        # Local disk-based caching for API responses
+
+# --- Blockchain & DeFi ---
+web3             # Ethereum blockchain interaction
+eth_utils        # Ethereum address and utility functions
+
+# --- Excel File Handling ---
+openpyxl         # Read/write Excel .xlsx files
+
+tqdm             # (Optional) Progress bars in terminal (fallback) 
