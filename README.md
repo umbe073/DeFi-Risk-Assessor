@@ -1,2 +1,2 @@
 # DeFi-Risk-Assessor
-A DeFi Risk Assessment script that will assist AML Analysts to fetch a concrete score for the Risk Level of a single DeFi Token 
+The DeFi Complete Risk Assessment Suite is a Python-based engine for automated, explainable token risk assessments. It is designed for AML analysts, hedge funds, listing managers, exchanges, and institutional risk teams who need a consistent way to evaluate DeFi tokens across multiple chains and data providers.
