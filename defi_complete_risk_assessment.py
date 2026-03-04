@@ -1,5 +1,4 @@
 # Standard library imports
-from itertools import chain
 import os
 import time
 import csv
@@ -22,8 +21,17 @@ import shelve
 from diskcache import Cache
 import threading
 
+# Base paths (script is launched from repository root via run_risk_assessment.sh)
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
+PROJECT_ROOT = SCRIPT_DIR
+DEFAULT_DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+# Backward-compatible fallback for repos keeping data files at project root.
+DATA_DIR = DEFAULT_DATA_DIR if os.path.isdir(DEFAULT_DATA_DIR) else PROJECT_ROOT
+LOGS_DIR = os.path.join(PROJECT_ROOT, 'logs')
+os.makedirs(LOGS_DIR, exist_ok=True)
+
 # Write debug info to a file for troubleshooting app environment
-DEBUG_PATH = os.path.join(os.path.dirname(__file__), '../../data/debug_python_env.txt')
+DEBUG_PATH = os.path.join(DATA_DIR, 'debug_python_env.txt')
 try:
     with open(DEBUG_PATH, 'w') as f:
         f.write(f"[DEBUG] Python executable: {sys.executable}\n")
@@ -32,11 +40,6 @@ except Exception as e:
     pass  # Don't crash if debug file can't be written
 
 # Debug info only written to file, not printed to console
-
-# Set up data and log directories for correct file paths
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
-LOGS_DIR = os.path.join(PROJECT_ROOT, 'logs')
 
 print("[DEBUG] Using DATA_DIR:", DATA_DIR)
 EXCEL_REPORT_PATH = os.path.join(DATA_DIR, 'DeFi Tokens Risk Assessment Results.xlsx')
@@ -47,6 +50,7 @@ CMC_SYMBOL_MAP = os.path.join(DATA_DIR, 'cmc_symbol_map.json')
 FALLBACKS_JSON = os.path.join(DATA_DIR, 'fallbacks.json')
 RISK_REPORT_JSON = os.path.join(DATA_DIR, 'risk_report.json')
 RISK_REPORT_CSV = os.path.join(DATA_DIR, 'risk_report.csv')
+API_CACHE_DIR = os.path.join(DATA_DIR, 'api_cache')
 API_CACHE_DB = os.path.join(DATA_DIR, 'api_cache.db')
 VERBOSE_LOG = os.path.join(LOGS_DIR, 'risk_assessment_verbose.log')
 SUMMARY_TXT = os.path.join(LOGS_DIR, 'risk_assessment_summary.txt')
@@ -83,7 +87,6 @@ Required API Keys (in .env file):
 COINGECKO_ATTRIBUTION = "Market data provided by CoinGecko (https://www.coingecko.com)"
 
 # Setup logging
-LOGS_DIR = os.path.join(os.path.dirname(__file__), '../../logs')
 VERBOSE_LOG = os.path.join(LOGS_DIR, 'risk_assessment_verbose.log')
 SUMMARY_TXT = os.path.join(LOGS_DIR, 'risk_assessment_summary.txt')
 logging.basicConfig(filename=VERBOSE_LOG, level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
@@ -109,7 +112,20 @@ def fetch_and_update_fallbacks():
         coingecko_key = os.getenv("COINGECKO_API_KEY")
         ethplorer_key = os.getenv("ETHPLORER_API_KEY")
         cmc_key = os.getenv("COINMARKETCAP_API_KEY")
-        infura_key = os.getenv("INFURA_API_KEY")
+
+        # Build address->chain lookup from tokens.csv when available.
+        token_chain_map = {}
+        if os.path.exists(TOKENS_CSV):
+            try:
+                with open(TOKENS_CSV, 'r') as token_file:
+                    for row in csv.DictReader(token_file):
+                        row_addr = row.get('address', '').strip().lower()
+                        if not row_addr:
+                            continue
+                        row_chain = row.get('chain', 'eth').strip().lower() or 'eth'
+                        token_chain_map[row_addr] = row_chain
+            except Exception as e:
+                print(f"Warning: Unable to read token chains from {TOKENS_CSV}: {e}")
         
         # URL encode keys that might have special characters
         if ethplorer_key:
@@ -123,6 +139,7 @@ def fetch_and_update_fallbacks():
         
         for addr in cmc_map:
             addr_lc = addr.lower()
+            token_chain = token_chain_map.get(addr_lc, 'eth')
             print(f"\n=== Processing {addr} ===")
             
             # Initialize data structure
@@ -222,7 +239,7 @@ def fetch_and_update_fallbacks():
             
             # 3. COINGECKO DATA (Market data) - use DeFiRiskAssessor helper
             assessor = DeFiRiskAssessor()
-            market_data = assessor.fetch_market_data(addr, chain)
+            market_data = assessor.fetch_market_data(addr, token_chain)
             cg_data = market_data['coingecko']['market_data']
             token_data['price_usd'] = cg_data.get('current_price', {}).get('usd', 0)
             token_data['market_cap'] = cg_data.get('market_cap', {}).get('usd', 0)
@@ -514,7 +531,7 @@ class APICache:
     def close(self):
         self.db.close()
 
-api_cache = Cache(os.path.join(os.path.dirname(__file__), '../../data/api_cache'))
+api_cache = Cache(API_CACHE_DIR)
 
 # --- Ethplorer Bulk API Integration for Fallbacks ---
 def fetch_ethplorer_bulk(addresses, ethplorer_key):
@@ -4462,6 +4479,7 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
     summaries = []
     fallback_count = 0
     api_error_count = 0
+    counters_lock = threading.Lock()
     total = len(tokens)
     
     # Initialize the progress bar system
@@ -4490,12 +4508,12 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
                 total_tokens=total_tokens
             )
             # Count fallback usage
-            if result['details']['onchain']['holders']['total_holders'] == 0 or result['details']['onchain']['liquidity'] == 0:
-                fallback_count += 1
-            # Count API errors (if any)
-            if 'error' in result['details']:
-                api_error_count += 1
-            results.append(result)
+            onchain_details = result.get('details', {}).get('onchain', {})
+            holders_count = onchain_details.get('holders', {}).get('total_holders', 0)
+            liquidity = onchain_details.get('liquidity', 0)
+            used_fallback = holders_count == 0 or liquidity == 0
+            has_api_error = 'error' in result.get('details', {})
+
             # Build summary for this token
             red_flags = result['details']['onchain']['red_flags']
             summary = {
@@ -4515,19 +4533,26 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
                 },
                 "component_scores": result['component_scores']
             }
-            summaries.append(summary)
+            with counters_lock:
+                if used_fallback:
+                    fallback_count += 1
+                if has_api_error:
+                    api_error_count += 1
+                results.append(result)
+                summaries.append(summary)
             print(f"  Score: {result['risk_score']} - {result['risk_category']}")
             logging.info(f"  Score: {result['risk_score']} - {result['risk_category']}")
         except Exception as e:
             print(f"[process_token_batch] Error processing {address} on {chain}: {str(e)}")
             logging.error(f"[process_token_batch] Error processing {address} on {chain}: {str(e)}")
-            results.append({
-                "token": address,
-                "chain": chain,
-                "risk_score": 150,
-                "risk_category": "Extreme Risk",
-                "error": str(e)
-            })
+            with counters_lock:
+                results.append({
+                    "token": address,
+                    "chain": chain,
+                    "risk_score": 150,
+                    "risk_category": "Extreme Risk",
+                    "error": str(e)
+                })
     # Parallel execution
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_one, token, idx, total): (token, idx) for idx, token in enumerate(tokens)}
@@ -4604,7 +4629,8 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
         f.write(f"Total tokens processed: {total}\n")
         f.write(f"Tokens using fallback data: {fallback_count}\n")
         f.write(f"Tokens with API errors: {api_error_count}\n")
-        f.write(f"Duplicates found: {len(set([t['address'].lower() for t in tokens]) ) - len(tokens)}\n")
+        duplicate_count = len(tokens) - len({t['address'].lower() for t in tokens})
+        f.write(f"Duplicates found: {duplicate_count}\n")
     print("Summary report saved to risk_assessment_summary.txt")
     logging.info("Summary report saved to risk_assessment_summary.txt")
 
@@ -5134,18 +5160,6 @@ def fetch_1inch_quote(from_token_address, to_token_address, amount, chain_id=1):
     except Exception as e:
         print(f"Error fetching 1inch quote: {e}")
         return {}
-
-# Example/test usage
-if __name__ == "__main__":
-    # Example: ETH -> USDT on Ethereum mainnet
-    ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
-    USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-    amount_wei = 10**18  # 1 ETH in wei
-    try:
-        quote = fetch_1inch_quote(ETH, USDT, amount_wei, chain_id=1)
-        print("1inch quote ETH->USDT:", quote)
-    except Exception as e:
-        print("Error fetching 1inch quote:", e)
 
 if __name__ == "__main__":
     # At the start of main execution (before processing tokens)
