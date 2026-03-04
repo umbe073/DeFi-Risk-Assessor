@@ -7,10 +7,36 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Set up the Python environment
-VENV_PATH="/Users/amlfreak/Desktop/venv"
-PYTHON_PATH="$VENV_PATH/bin/python3"
+# Set up script paths
 SCRIPT_FILE="defi_complete_risk_assessment.py"
+UPDATE_SCRIPT_FILE="update_risk_assessment_xlsx.py"
+
+resolve_python() {
+    # 1) Explicit override via environment variable
+    if [ -n "${PYTHON_PATH:-}" ]; then
+        if [ -x "$PYTHON_PATH" ]; then
+            echo "$PYTHON_PATH"
+            return 0
+        fi
+        echo "Error: PYTHON_PATH is set but not executable: $PYTHON_PATH" >&2
+        return 1
+    fi
+
+    # 2) Active virtualenv
+    if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/python3" ]; then
+        echo "$VIRTUAL_ENV/bin/python3"
+        return 0
+    fi
+
+    # 3) Fallback to system python3
+    if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+        return 0
+    fi
+
+    echo "Error: Could not locate a usable python3 interpreter." >&2
+    return 1
+}
 
 # Check if Python script exists
 if [ ! -f "$SCRIPT_FILE" ]; then
@@ -18,35 +44,43 @@ if [ ! -f "$SCRIPT_FILE" ]; then
     exit 1
 fi
 
-# Check if Python environment exists
-if [ ! -f "$PYTHON_PATH" ]; then
-    echo "Error: Python environment not found at $PYTHON_PATH"
-    echo "Please ensure the virtual environment is set up correctly."
+if [ ! -f "$UPDATE_SCRIPT_FILE" ]; then
+    echo "Error: $UPDATE_SCRIPT_FILE not found in $SCRIPT_DIR"
     exit 1
 fi
 
+PYTHON_BIN="$(resolve_python)" || {
+    echo "Please set PYTHON_PATH or activate a virtual environment before running."
+    exit 1
+}
+
 echo "🚀 Launching DeFi Risk Assessment Tool..."
 echo "📁 Working directory: $SCRIPT_DIR"
-echo "🐍 Python: $PYTHON_PATH"
+echo "🐍 Python: $PYTHON_BIN"
 echo "📄 Script: $SCRIPT_FILE"
 echo ""
 
-# Launch the Python script with progress bar
-cd "$SCRIPT_DIR"
-"$PYTHON_PATH" "$SCRIPT_FILE"
+# Launch the main Python script with progress bar
+"$PYTHON_BIN" "$SCRIPT_FILE"
+MAIN_EXIT_CODE=$?
+
+if [ $MAIN_EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "❌ Risk assessment failed while running $SCRIPT_FILE (exit code: $MAIN_EXIT_CODE)"
+    exit $MAIN_EXIT_CODE
+fi
 
 # Update the Excel report after the main script completes
-"$PYTHON_PATH" update_risk_assessment_xlsx.py
+"$PYTHON_BIN" "$UPDATE_SCRIPT_FILE"
+UPDATE_EXIT_CODE=$?
 
-# Check exit status
-if [ $? -eq 0 ]; then
+if [ $UPDATE_EXIT_CODE -eq 0 ]; then
     echo ""
     echo "✅ Risk assessment completed successfully!"
-    echo "📊 Check the '../../../data/' directory for results"
-    echo "📝 Check the '../../../logs/' directory for detailed logs"
+    echo "📊 Check the output files in $SCRIPT_DIR"
 else
     echo ""
-    echo "❌ Risk assessment failed!"
+    echo "❌ Risk assessment failed while running $UPDATE_SCRIPT_FILE (exit code: $UPDATE_EXIT_CODE)"
     echo "📝 Check the logs for error details"
-    exit 1
+    exit $UPDATE_EXIT_CODE
 fi
