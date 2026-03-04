@@ -65,7 +65,12 @@ class WorkingProgressBar:
         """Create a working progress bar using a simple GUI"""
         try:
             # Copy logo files to /tmp/ so they can be referenced from the HTML
-            logo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../docs/Logos'))
+            script_dir = os.path.abspath(os.path.dirname(__file__))
+            logo_dir_candidates = [
+                os.path.join(script_dir, "docs", "Logos"),
+                os.path.abspath(os.path.join(script_dir, "..", "docs", "Logos")),
+            ]
+            logo_dir = next((path for path in logo_dir_candidates if os.path.isdir(path)), logo_dir_candidates[0])
             logo_files = [
                 '1inch-exchange-logo.png',
                 'bitquery-logo.jpg',

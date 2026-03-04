@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ast
 import pandas as pd
 import json
 import os
@@ -11,8 +12,11 @@ from openpyxl.styles import Font
 from datetime import datetime
 from working_progress_bar import update_progress_phase, finish_progress_bar, working_progress_bar
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
+PROJECT_ROOT = SCRIPT_DIR
+DEFAULT_DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+# Backward-compatible fallback for repos keeping data files at project root.
+DATA_DIR = DEFAULT_DATA_DIR if os.path.isdir(DEFAULT_DATA_DIR) else PROJECT_ROOT
 
 print("[DEBUG] Using DATA_DIR:", DATA_DIR)
 xlsx_file = os.path.join(DATA_DIR, 'DeFi Tokens Risk Assessment Results.xlsx')
@@ -205,11 +209,12 @@ def main():
             try:
                 # Handle both list string format and comma-separated format
                 if red_flags_list.startswith('[') and red_flags_list.endswith(']'):
-                    red_flags_list = eval(red_flags_list) if red_flags_list else []
+                    parsed_flags = ast.literal_eval(red_flags_list) if red_flags_list else []
+                    red_flags_list = [str(flag).strip() for flag in parsed_flags if str(flag).strip()] if isinstance(parsed_flags, list) else []
                 else:
                     # Handle comma-separated format
                     red_flags_list = [flag.strip() for flag in red_flags_list.split(',') if flag.strip()]
-            except:
+            except (ValueError, SyntaxError):
                 red_flags_list = []
         elif not isinstance(red_flags_list, list):
             red_flags_list = []
