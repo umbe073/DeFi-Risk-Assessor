@@ -1,0 +1,52 @@
+mkdir -p .github/workflows
+cat > .github/workflows/auto-open-pr-from-cursor-branches.yml <<'YAML'
+name: Auto Open PR From Cursor Branches
+
+on:
+  push:
+    branches:
+      - "cursor/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create PR if missing
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const head = context.ref.replace("refs/heads/", "");
+
+            if (!head.startsWith("cursor/")) return;
+
+            const repoInfo = await github.rest.repos.get({ owner, repo });
+            const base = repoInfo.data.default_branch || "main";
+
+            const existing = await github.rest.pulls.list({
+              owner, repo, state: "open", head: `${owner}:${head}`, base, per_page: 1
+            });
+            if (existing.data.length > 0) return;
+
+            const pretty = head.replace(/^cursor\//, "").replace(/[-_]+/g, " ").trim();
+            const title = `[Cursor] ${pretty || head}`;
+            const body = [
+              "Auto-opened PR from Cursor push.",
+              "",
+              `- Source branch: \`${head}\``,
+              `- Base branch: \`${base}\``,
+              "",
+              "Merge remains manual via Slack ✅ reaction.",
+            ].join("\n");
+
+            await github.rest.pulls.create({ owner, repo, title, head, base, body, maintainer_can_modify: true });
+YAML
+
+git add .github/workflows/auto-open-pr-from-cursor-branches.yml
+git commit -m "ci: auto-open PR for cursor branches"
+git push origin main
