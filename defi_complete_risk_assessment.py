@@ -682,37 +682,165 @@ class DeFiRiskAssessor:
             "esg_impact": 0.02
         }
         
-        # Configuration for different blockchain networks
+        # Normalize common chain labels into canonical internal chain names.
+        self.CHAIN_ALIASES = {
+            "ethereum": "eth",
+            "erc20": "eth",
+            "mainnet": "eth",
+            "bnb": "bsc",
+            "bep20": "bsc",
+            "binance-smart-chain": "bsc",
+            "matic": "polygon",
+            "polygon-pos": "polygon",
+            "polygon-mainnet": "polygon",
+            "arb": "arbitrum",
+            "arbitrum-one": "arbitrum",
+            "op": "optimism",
+            "avax": "avalanche",
+            "avax-c": "avalanche",
+            "avalanche-c": "avalanche",
+            "base-mainnet": "base",
+            "unichain": "uni"
+        }
+
+        # Configuration for supported blockchain networks.
+        # New EVM chains use Etherscan v2 with chain-specific chainid values.
         self.CHAIN_CONFIG = {
             "eth": {
                 "rpc": f"https://mainnet.infura.io/v3/{os.getenv('INFURA_API_KEY')}",
-                "scan_url": "https://api.etherscan.io/v2/api",  # Ethereum mainnet
+                "scan_url": "https://api.etherscan.io/v2/api",
                 "scan_key": os.getenv("ETHERSCAN_API_KEY"),
+                "scan_chain_id": 1,
+                "chain_id": 1,
                 "coin_id": "ethereum",
                 "dex": "uniswap",
                 "min_liquidity": 5000000,
                 "token_info_action": "tokeninfo",
-                "coingecko_platform": "ethereum"
+                "coingecko_platform": "ethereum",
+                "defillama_chain": "ethereum",
+                "debank_chain": "eth",
+                "bitquery_network": "ethereum",
+                "certik_chain": "eth",
+                "supports_holderlist": True
             },
             "bsc": {
                 "rpc": "https://bsc-dataseed.binance.org/",
-                "scan_url": "https://api.bscscan.com/api",  # BSC mainnet
-                "scan_key": os.getenv("BSCSCAN_API_KEY", os.getenv("ETHERSCAN_API_KEY")),  # Fallback to Etherscan key if BSCScan key not available
+                "scan_url": "https://api.etherscan.io/v2/api",
+                "scan_key": os.getenv("BSCSCAN_API_KEY", os.getenv("ETHERSCAN_API_KEY")),
+                "scan_chain_id": 56,
+                "chain_id": 56,
                 "coin_id": "binancecoin",
                 "dex": "pancakeswap",
                 "min_liquidity": 3000000,
-                "token_info_action": "token",
-                "coingecko_platform": "binance-smart-chain"
+                "token_info_action": "tokeninfo",
+                "coingecko_platform": "binance-smart-chain",
+                "defillama_chain": "bsc",
+                "debank_chain": "bsc",
+                "bitquery_network": "bsc",
+                "certik_chain": "bsc",
+                "supports_holderlist": True
+            },
+            "polygon": {
+                "rpc": "https://polygon-rpc.com/",
+                "scan_url": "https://api.etherscan.io/v2/api",
+                "scan_key": os.getenv("POLYGONSCAN_API_KEY", os.getenv("ETHERSCAN_API_KEY")),
+                "scan_chain_id": 137,
+                "chain_id": 137,
+                "coin_id": "matic-network",
+                "dex": "quickswap",
+                "min_liquidity": 2000000,
+                "token_info_action": "tokeninfo",
+                "coingecko_platform": "polygon-pos",
+                "defillama_chain": "polygon",
+                "debank_chain": "matic",
+                "bitquery_network": "polygon",
+                "certik_chain": "polygon",
+                "supports_holderlist": True
+            },
+            "arbitrum": {
+                "rpc": "https://arb1.arbitrum.io/rpc",
+                "scan_url": "https://api.etherscan.io/v2/api",
+                "scan_key": os.getenv("ARBISCAN_API_KEY", os.getenv("ETHERSCAN_API_KEY")),
+                "scan_chain_id": 42161,
+                "chain_id": 42161,
+                "coin_id": "ethereum",
+                "dex": "uniswap",
+                "min_liquidity": 2000000,
+                "token_info_action": "tokeninfo",
+                "coingecko_platform": "arbitrum-one",
+                "defillama_chain": "arbitrum",
+                "debank_chain": "arb",
+                "bitquery_network": "arbitrum",
+                "certik_chain": "arbitrum",
+                "supports_holderlist": True
+            },
+            "optimism": {
+                "rpc": "https://mainnet.optimism.io",
+                "scan_url": "https://api.etherscan.io/v2/api",
+                "scan_key": os.getenv("OPTIMISMSCAN_API_KEY", os.getenv("ETHERSCAN_API_KEY")),
+                "scan_chain_id": 10,
+                "chain_id": 10,
+                "coin_id": "ethereum",
+                "dex": "uniswap",
+                "min_liquidity": 2000000,
+                "token_info_action": "tokeninfo",
+                "coingecko_platform": "optimistic-ethereum",
+                "defillama_chain": "optimism",
+                "debank_chain": "op",
+                "bitquery_network": "optimism",
+                "certik_chain": "optimism",
+                "supports_holderlist": True
+            },
+            "base": {
+                "rpc": "https://mainnet.base.org",
+                "scan_url": "https://api.etherscan.io/v2/api",
+                "scan_key": os.getenv("BASESCAN_API_KEY", os.getenv("ETHERSCAN_API_KEY")),
+                "scan_chain_id": 8453,
+                "chain_id": 8453,
+                "coin_id": "ethereum",
+                "dex": "uniswap",
+                "min_liquidity": 2000000,
+                "token_info_action": "tokeninfo",
+                "coingecko_platform": "base",
+                "defillama_chain": "base",
+                "debank_chain": "base",
+                "bitquery_network": "base",
+                "certik_chain": "base",
+                "supports_holderlist": True
+            },
+            "avalanche": {
+                "rpc": "https://api.avax.network/ext/bc/C/rpc",
+                "scan_url": "https://api.etherscan.io/v2/api",
+                "scan_key": os.getenv("SNOWTRACE_API_KEY", os.getenv("ETHERSCAN_API_KEY")),
+                "scan_chain_id": 43114,
+                "chain_id": 43114,
+                "coin_id": "avalanche-2",
+                "dex": "trader-joe",
+                "min_liquidity": 1500000,
+                "token_info_action": "tokeninfo",
+                "coingecko_platform": "avalanche",
+                "defillama_chain": "avalanche",
+                "debank_chain": "avax",
+                "bitquery_network": "avalanche",
+                "certik_chain": "avax",
+                "supports_holderlist": True
             },
             "uni": {
                 "rpc": f"https://mainnet.infura.io/v3/{os.getenv('INFURA_API_KEY')}",
-                "scan_url": "https://api.etherscan.io/v2/api",  # Use Ethereum mainnet settings
+                "scan_url": "https://api.etherscan.io/v2/api",
                 "scan_key": os.getenv("ETHERSCAN_API_KEY"),
+                "scan_chain_id": 1,
+                "chain_id": 1,
                 "coin_id": "ethereum",
                 "dex": "uniswap",
                 "min_liquidity": 5000000,
                 "token_info_action": "tokeninfo",
-                "coingecko_platform": "ethereum"
+                "coingecko_platform": "ethereum",
+                "defillama_chain": "ethereum",
+                "debank_chain": "eth",
+                "bitquery_network": "ethereum",
+                "certik_chain": "eth",
+                "supports_holderlist": True
             }
         }
         
@@ -771,9 +899,31 @@ class DeFiRiskAssessor:
             print(f"Warning: Could not load cmc_symbol_map.json: {e}. CMC symbol map will be empty.")
             self.cmc_symbol_map = {}
         self.well_known_tokens = set(self.cmc_symbol_map.keys())
+
+    def normalize_chain(self, chain):
+        """Normalize chain aliases to canonical chain identifiers."""
+        raw_chain = (chain or "eth").strip().lower()
+        return self.CHAIN_ALIASES.get(raw_chain, raw_chain)
+
+    def get_chain_config(self, chain):
+        """Return normalized chain name and config dict."""
+        normalized_chain = self.normalize_chain(chain)
+        return normalized_chain, self.CHAIN_CONFIG.get(normalized_chain)
+
+    def build_scan_params(self, chain, params):
+        """Inject chainid automatically for multi-chain Etherscan v2 endpoints."""
+        normalized_chain, chain_config = self.get_chain_config(chain)
+        if not chain_config:
+            return normalized_chain, None
+        request_params = dict(params)
+        scan_chain_id = chain_config.get("scan_chain_id")
+        if scan_chain_id is not None and "chainid" not in request_params:
+            request_params["chainid"] = str(scan_chain_id)
+        return normalized_chain, request_params
     
     def get_contract_verification_status(self, token_address, chain):
         """Check if contract is verified on the block explorer"""
+        chain = self.normalize_chain(chain)
         if chain not in self.CHAIN_CONFIG:
             return "unknown"
         
@@ -794,12 +944,12 @@ class DeFiRiskAssessor:
         if address_lower in well_known_verified:
             return well_known_verified[address_lower]
         
-        params = {
+        chain, params = self.build_scan_params(chain, {
             'module': 'contract',
             'action': 'getsourcecode',
             'address': token_address,
             'apikey': self.CHAIN_CONFIG[chain]['scan_key']
-        }
+        })
         url = self.CHAIN_CONFIG[chain]['scan_url']
         
         try:
@@ -845,6 +995,7 @@ class DeFiRiskAssessor:
     
     def get_holder_data(self, token_address, chain):
         """Get comprehensive holder data, with fallback for well-known tokens"""
+        chain = self.normalize_chain(chain)
         address_lower = token_address.lower()
         fallback = self.fallbacks.get('tokens', {}).get(address_lower)
         if chain not in self.CHAIN_CONFIG:
@@ -856,12 +1007,12 @@ class DeFiRiskAssessor:
         top10_concentration = 100
         # Try Etherscan
         try:
-            params = {
+            chain, params = self.build_scan_params(chain, {
                 'module': self.CHAIN_CONFIG[chain]['token_info_action'],
                 'action': 'tokeninfo',
                 'contractaddress': token_address,
                 'apikey': self.CHAIN_CONFIG[chain]['scan_key']
-            }
+            })
             url = self.CHAIN_CONFIG[chain]['scan_url']
             cache_key = get_cache_key(url, params)
             cached = api_cache.get(cache_key)
@@ -901,16 +1052,16 @@ class DeFiRiskAssessor:
             print(f"[get_holder_data] Error getting Ethplorer data for {token_address}: {e}")
         # Try top holders from Etherscan (if available)
         top_holders = []
-        if chain in ["eth", "bsc"]:
+        if self.CHAIN_CONFIG[chain].get("supports_holderlist", False):
             for page in range(1, 3):  # Get top 20 holders
-                params = {
+                chain, params = self.build_scan_params(chain, {
                     'module': 'token',
                     'action': 'tokenholderlist',
                     'contractaddress': token_address,
                     'apikey': self.CHAIN_CONFIG[chain]['scan_key'],
                     'page': page,
                     'offset': 10
-                }
+                })
                 try:
                     response = self.session.get(
                         self.CHAIN_CONFIG[chain]['scan_url'],
@@ -946,15 +1097,16 @@ class DeFiRiskAssessor:
     
     def get_token_supply(self, token_address, chain):
         """Get total token supply"""
+        chain = self.normalize_chain(chain)
         if chain not in self.CHAIN_CONFIG:
             return 0
             
-        params = {
+        chain, params = self.build_scan_params(chain, {
             'module': 'stats',
             'action': 'tokensupply',
             'contractaddress': token_address,
             'apikey': self.CHAIN_CONFIG[chain]['scan_key']
-        }
+        })
         
         try:
             response = self.session.get(
@@ -974,6 +1126,7 @@ class DeFiRiskAssessor:
     
     def get_liquidity_data(self, token_address, chain):
         """Get accurate liquidity data, with fallback for well-known tokens"""
+        chain = self.normalize_chain(chain)
         address_lower = token_address.lower()
         fallback = self.fallbacks.get('tokens', {}).get(address_lower)
         if chain not in self.CHAIN_CONFIG:
@@ -1020,12 +1173,12 @@ class DeFiRiskAssessor:
             print(f"[get_liquidity_data] Error getting Ethplorer liquidity for {token_address}: {e}")
         # Try Etherscan as a last real-time source
         try:
-            params = {
+            chain, params = self.build_scan_params(chain, {
                 'module': self.CHAIN_CONFIG[chain]['token_info_action'],
                 'action': 'tokeninfo',
                 'contractaddress': token_address,
                 'apikey': self.CHAIN_CONFIG[chain]['scan_key']
-            }
+            })
             url = self.CHAIN_CONFIG[chain]['scan_url']
             cache_key = get_cache_key(url, params)
             cached = api_cache.get(cache_key)
@@ -1089,6 +1242,7 @@ class DeFiRiskAssessor:
                 - red_flags: Detected warning signs
                 - bitquery: Additional on-chain metrics (if available)
         """
+        chain = self.normalize_chain(chain)
         if chain not in self.CHAIN_CONFIG:
             return {
                 'contract_verified': 'unknown',
@@ -1133,6 +1287,7 @@ class DeFiRiskAssessor:
     
     def fetch_bitquery_data(self, token_address, chain):
         """Fetch on-chain data from BitQuery"""
+        chain = self.normalize_chain(chain)
         if not getattr(self, 'bitquery_available', True):
             if not hasattr(self, '_bitquery_warned'):
                 msg = "BitQuery API unavailable due to previous 401 error. Skipping BitQuery for all tokens and using fallback data."
@@ -1150,13 +1305,9 @@ class DeFiRiskAssessor:
         api_key = api_key.strip()  # Remove whitespace
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
             
-        # Map chain to BitQuery's network identifier
-        network_map = {
-            "eth": "ethereum",
-            "bsc": "bsc"
-        }
-        
-        if chain not in network_map:
+        chain_config = self.CHAIN_CONFIG.get(chain)
+        bitquery_network = chain_config.get("bitquery_network") if chain_config else None
+        if not bitquery_network:
             return {
                 "transfers": {"count": 0, "amount": 0},
                 "transactions": {"count": 0, "amount": 0}
@@ -1181,7 +1332,7 @@ class DeFiRiskAssessor:
             }
           }
         }
-        """ % (network_map[chain], network_map[chain], token_address, token_address)
+        """ % (bitquery_network, bitquery_network, token_address, token_address)
         
         try:
             cache_key = get_cache_key("https://graphql.bitquery.io", None, headers, {"query": query})
@@ -1210,7 +1361,7 @@ class DeFiRiskAssessor:
                 else:
                     bitquery_data = None
             if bitquery_data:
-                return bitquery_data.get('data', {}).get(network_map[chain], {
+                return bitquery_data.get('data', {}).get(bitquery_network, {
                     "transfers": {"count": 0, "amount": 0},
                     "transactions": {"count": 0, "amount": 0}
                 })
@@ -1271,6 +1422,10 @@ class DeFiRiskAssessor:
                 'developer_data': {}
             }
         }
+        chain = self.normalize_chain(chain)
+        if chain not in self.CHAIN_CONFIG:
+            data['cmc']['metadata']['error'] = f"Unsupported chain: {chain}"
+            return data
         
         # CoinMarketCap data
         cmc_api_key = os.getenv("COINMARKETCAP_API_KEY")
@@ -1443,8 +1598,7 @@ class DeFiRiskAssessor:
         missing_price = data['coingecko']['market_data']['current_price'].get('usd', 0) == 0
         if missing_market_cap or missing_price:
             try:
-                # Map internal chain names to DeFiLlama chain names
-                defillama_chain = "ethereum" if chain in ["eth", "uni"] else "bsc" if chain == "bsc" else "ethereum"
+                defillama_chain = self.CHAIN_CONFIG[chain].get("defillama_chain", "ethereum")
                 llama_price = fetch_defillama_token_price(token_address, defillama_chain)
                 if llama_price and 'coins' in llama_price:
                     key = f'{defillama_chain}:{token_address.lower()}'
@@ -1476,6 +1630,7 @@ class DeFiRiskAssessor:
     
     def fetch_santiment_data(self, token_address, chain):
         """Fetch social and development data from Santiment"""
+        chain = self.normalize_chain(chain)
         if not self.SANTIMENT_API_KEY:
             return {}
         
@@ -1564,10 +1719,9 @@ class DeFiRiskAssessor:
     
     def fetch_security_reports(self, token_address, chain):
         """Fetch security reports from CertiK with correct endpoint"""
+        chain = self.normalize_chain(chain)
         reports = []
-        
-        # Only fetch for supported chains
-        if chain not in ["eth", "bsc"]:
+        if chain not in self.CHAIN_CONFIG:
             return reports
         
         # CertiK API
@@ -1576,7 +1730,7 @@ class DeFiRiskAssessor:
                 certik_url = "https://api.certik.com/v1/tokens"
                 params = {
                     "address": token_address,
-                    "chain": "eth",  # Mainnet is the primary chain
+                    "chain": self.CHAIN_CONFIG[chain].get("certik_chain", "eth"),
                     "limit": 1
                 }
                 headers = {
@@ -1608,6 +1762,7 @@ class DeFiRiskAssessor:
     
     def fetch_enhanced_data(self, token_address, chain):
         """Fetch enhanced data from new API integrations (Zapper, DeBank, DeFiLlama, Moralis)"""
+        chain = self.normalize_chain(chain)
         enhanced_data = {
             'zapper': {},
             'debank': {},
@@ -1640,8 +1795,8 @@ class DeFiRiskAssessor:
                         enhanced_data['debank']['portfolio'] = debank_portfolio
                     
                     # Fetch token list for the chain
-                    chain_id = "eth" if chain == "eth" else "bsc"
-                    debank_tokens = fetch_debank_token_list(chain_id)
+                    debank_chain = self.CHAIN_CONFIG.get(chain, {}).get("debank_chain")
+                    debank_tokens = fetch_debank_token_list(debank_chain) if debank_chain else None
                     if debank_tokens:
                         enhanced_data['debank']['tokens'] = debank_tokens
                 except Exception as e:
@@ -1650,7 +1805,8 @@ class DeFiRiskAssessor:
             # DeFiLlama API data (no API key required - free API)
             try:
                 # Fetch token price data
-                defillama_price = fetch_defillama_token_price(token_address, chain)
+                defillama_chain = self.CHAIN_CONFIG.get(chain, {}).get("defillama_chain", "ethereum")
+                defillama_price = fetch_defillama_token_price(token_address, defillama_chain)
                 if defillama_price:
                     enhanced_data['defillama']['price'] = defillama_price
                 
@@ -1688,6 +1844,7 @@ class DeFiRiskAssessor:
     
     def detect_red_flags(self, token_address, chain):
         """Detect security red flags with improved reliability and strict compliance criteria"""
+        chain = self.normalize_chain(chain)
         flags_triggered = []
         if chain not in self.CHAIN_CONFIG:
             return flags_triggered
@@ -1708,12 +1865,12 @@ class DeFiRiskAssessor:
                 contract_age_days = None
                 try:
                     # Try to get contract creation date from Etherscan API
-                    params = {
+                    chain, params = self.build_scan_params(chain, {
                         'module': 'contract',
                         'action': 'getcontractcreation',
                         'contractaddresses': token_address,
                         'apikey': self.CHAIN_CONFIG[chain]['scan_key']
-                    }
+                    })
                     response = self.session.get(
                         self.CHAIN_CONFIG[chain]['scan_url'],
                         params=params,
@@ -1746,12 +1903,12 @@ class DeFiRiskAssessor:
                     flags_triggered.append('unverified_contract')
             # --- Proxy contract check (robust pattern) ---
             try:
-                params = {
+                chain, params = self.build_scan_params(chain, {
                     'module': 'contract',
                     'action': 'getsourcecode',
                     'address': token_address,
                     'apikey': self.CHAIN_CONFIG[chain]['scan_key']
-                }
+                })
                 response = self.session.get(
                     self.CHAIN_CONFIG[chain]['scan_url'],
                     params=params,
@@ -1775,7 +1932,7 @@ class DeFiRiskAssessor:
     
     def assess_token(self, token_address, chain="eth", progress_callback=None, token_index=0, total_tokens=1):
         """Assess a token and return a risk report with new AML/Compliance logic"""
-        chain = chain.lower()
+        chain = self.normalize_chain(chain)
         if chain not in self.CHAIN_CONFIG:
             return {
                 'token': token_address,
@@ -3206,6 +3363,7 @@ class DeFiRiskAssessor:
     
     def score_aml_data(self, risk_report, token_address, chain):
         """Score based on AML data from CertiK, Scorechain, TRM Labs, Elliptic (if available)"""
+        chain = self.normalize_chain(chain)
         indicators = []
         score = 10
         # CertiK
@@ -3253,6 +3411,7 @@ class DeFiRiskAssessor:
     def score_compliance_data(self, risk_report, token_address, chain):
         """Score based on compliance data (Breadcrumbs, exchange, KYC/AML, red flags, OpenSanctions, Lukka, Alchemy, DeFiSafety)"""
         try:
+            chain = self.normalize_chain(chain)
             score = 5
             data_found = False
             compliance_indicators = []
@@ -3838,6 +3997,7 @@ class DeFiRiskAssessor:
             Adds red flags to risk_report['onchain']['red_flags'] when
             compliance issues are detected
         """
+        chain = self.normalize_chain(chain)
         if chain not in self.CHAIN_CONFIG:
             return
         
@@ -4495,7 +4655,7 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
     logging.info(f"Starting risk assessment for {total} tokens...")
     def process_one(token, token_index, total_tokens):
         nonlocal fallback_count, api_error_count
-        chain = token.get("chain", "eth").strip().lower()
+        chain = analyzer.normalize_chain(token.get("chain", "eth"))
         address = token["address"].strip()
         
         # Remove per-token progress bar update from here
@@ -4561,7 +4721,7 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
             completed += 1
             token, idx = futures[future]
             address = token["address"].strip()
-            chain = token.get("chain", "eth").strip().lower()
+            chain = analyzer.normalize_chain(token.get("chain", "eth"))
             # Update progress bar with current token info (main thread, after token is truly done)
             if PROGRESS_AVAILABLE:
                 try:
