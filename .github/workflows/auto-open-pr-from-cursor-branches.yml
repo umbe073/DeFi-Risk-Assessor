@@ -44,14 +44,27 @@ jobs:
               `- Source branch: \`${head}\``,
               `- Base branch: \`${base}\``,
             ].join("\n");
-
-            await github.rest.pulls.create({
-              owner,
-              repo,
-              title,
-              head,
-              base,
-              body,
-              draft: false,
-              maintainer_can_modify: true,
-            });
+            try {
+              await github.rest.pulls.create({
+                owner,
+                repo,
+                title,
+                head,
+                base,
+                body,
+                draft: false,
+                maintainer_can_modify: true,
+              });
+            } catch (error) {
+              const apiMessage = error?.response?.data?.message || error.message || "";
+              if (
+                error?.status === 403 &&
+                apiMessage.includes("not permitted to create or approve pull requests")
+              ) {
+                const compareUrl = `https://github.com/${owner}/${repo}/compare/${base}...${head}?expand=1`;
+                core.warning(`Auto-creating PR is blocked by repository policy: ${apiMessage}`);
+                core.notice(`Open PR manually here: ${compareUrl}`);
+                return;
+              }
+              throw error;
+            }
