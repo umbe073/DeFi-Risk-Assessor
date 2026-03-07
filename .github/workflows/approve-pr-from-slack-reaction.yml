@@ -46,7 +46,7 @@ jobs:
             };
             const toPositiveInt = (value) => {
               if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
-              if (typeof value === "string" && /^[0-9]+$/.test(value.trim())) return Number(value.trim());
+              if (typeof value === "string" && /^[1-9]\d*$/.test(value.trim())) return Number(value.trim());
               return null;
             };
             const normalizeReaction = (value) => {
@@ -59,12 +59,16 @@ jobs:
                 "heavy-check-mark": "white_check_mark",
                 "check_mark": "white_check_mark",
                 "check-mark": "white_check_mark",
+                "✅": "white_check_mark",
                 "no_entry": "no_entry",
                 "no-entry": "no_entry",
                 "no_entry_sign": "no_entry",
                 "no-entry-sign": "no_entry",
                 "stop_sign": "no_entry",
                 "stop-sign": "no_entry",
+                "⛔": "no_entry",
+                "⛔️": "no_entry",
+                "🚫": "no_entry",
               };
               return aliases[trimmed] || trimmed;
             };
@@ -246,12 +250,19 @@ jobs:
               if (isTruthy(process.env.DELETE_BRANCH || "true")) {
                 try {
                   if (pr.head.ref !== pr.base.ref) {
-                    await github.rest.git.deleteRef({
-                      owner,
-                      repo,
-                      ref: `heads/${pr.head.ref}`,
-                    });
-                    logReason("branch_deleted", `Deleted merged branch "${pr.head.ref}".`);
+                    if (pr.head.repo?.full_name === pr.base.repo?.full_name) {
+                      await github.rest.git.deleteRef({
+                        owner,
+                        repo,
+                        ref: `heads/${pr.head.ref}`,
+                      });
+                      logReason("branch_deleted", `Deleted merged branch "${pr.head.ref}".`);
+                    } else {
+                      logReason(
+                        "skip_delete_branch",
+                        `PR head repo "${pr.head.repo?.full_name || "unknown"}" differs from base repo; skip delete.`,
+                      );
+                    }
                   } else {
                     logReason("skip_delete_branch", `Head and base are identical ("${pr.head.ref}"), skip delete.`);
                   }
