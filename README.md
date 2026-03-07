@@ -25,9 +25,12 @@ If your repository blocks PR creation by `GITHUB_TOKEN`, configure one of the fo
 - Preferred workaround: add repository secret `CURSOR_PR_AUTOMATION_TOKEN` with a PAT that can open PRs in this repo.
 - Alternative: in repository settings, enable **Allow GitHub Actions to create and approve pull requests**.
 
-## Manual PR approval from Slack reaction
+## Manual PR moderation from Slack reaction
 
-The `Approve PR From Slack Reaction` workflow approves an open pull request when it receives a Slack reaction payload containing `:white_check_mark:` (also accepts `✅`, `:heavy_check_mark:`, and `:check_mark:` aliases).
+The `Process PR From Slack Reaction` workflow processes open pull requests from Slack reaction payloads:
+
+- `:white_check_mark:` (also accepts `✅`, `:heavy_check_mark:`, and `:check_mark:` aliases) approves and attempts to merge the PR.
+- `:no_entry:` (also accepts `⛔`, `🚫`, and `:no_entry_sign:` aliases) requests changes and closes the PR.
 
 - Accepted trigger events:
   - `repository_dispatch` (event type can be chosen by your Slack bridge)
@@ -40,3 +43,5 @@ The `Approve PR From Slack Reaction` workflow approves an open pull request when
 
 Default channel filter is `github_pull_requests`. If your Slack integration sends a different channel name or ID, update `ALLOWED_SLACK_CHANNELS` in `.github/workflows/approve-pr-from-slack-reaction.yml`.
 When `ALLOWED_SLACK_CHANNELS` is set, the dispatch payload must include a matching channel value.
+
+Merge strategy defaults to `squash` and can be changed with the `MERGE_METHOD` environment variable in the workflow (`merge`, `squash`, or `rebase`).
