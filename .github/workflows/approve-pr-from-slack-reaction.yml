@@ -137,6 +137,17 @@ jobs:
               return;
             }
 
+            let approverLogin = "github-actions[bot]";
+            try {
+              const { data: authenticatedUser } = await github.rest.users.getAuthenticated();
+              if (authenticatedUser?.login) approverLogin = authenticatedUser.login;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              core.warning(
+                `Failed to determine authenticated reviewer; defaulting to "${approverLogin}": ${message}`
+              );
+            }
+
             const reviews = await github.paginate(github.rest.pulls.listReviews, {
               owner,
               repo,
@@ -144,10 +155,10 @@ jobs:
               per_page: 100,
             });
             const alreadyApprovedByAction = reviews.some(
-              (review) => review.user?.login === "github-actions[bot]" && review.state === "APPROVED"
+              (review) => review.user?.login === approverLogin && review.state === "APPROVED"
             );
             if (alreadyApprovedByAction) {
-              core.notice(`PR #${prNumber} is already approved by github-actions[bot].`);
+              core.notice(`PR #${prNumber} is already approved by ${approverLogin}.`);
               return;
             }
 
