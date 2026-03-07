@@ -78,6 +78,21 @@ jobs:
               return value.trim().replace(/^#/, "").toLowerCase();
             }
 
+            function sanitizeAuditText(value, maxLen = 120) {
+              let text = String(value || "");
+              if (!text) return "unknown";
+              text = text
+                .replace(/[\u0000-\u001F\u007F]/g, " ")
+                .replace(/<!?(?:here|channel|everyone)>/gi, "[redacted-mention]")
+                .replace(/\s+/g, " ")
+                .trim();
+              if (!text) return "unknown";
+              if (text.length > maxLen) {
+                return `${text.slice(0, Math.max(0, maxLen - 14)).trimEnd()}… [truncated]`;
+              }
+              return text;
+            }
+
             const payload = context.eventName === "workflow_dispatch"
               ? {
                   pr_number: core.getInput("pr_number"),
@@ -128,6 +143,7 @@ jobs:
                 payload.slack?.channel
               ) || ""
             ).trim();
+            const sanitizedChannel = sanitizeAuditText(channel);
             const allowedChannels = (process.env.ALLOWED_SLACK_CHANNELS || "")
               .split(",")
               .map((name) => normalizeChannel(name))
@@ -136,7 +152,7 @@ jobs:
             if (allowedChannels.length > 0 && (!normalizedChannel || !allowedChannels.includes(normalizedChannel))) {
               core.notice(
                 channel
-                  ? `Ignoring reaction from unauthorized channel "${channel}".`
+                  ? `Ignoring reaction from unauthorized channel "${sanitizedChannel}".`
                   : "Ignoring reaction with missing Slack channel."
               );
               return;
@@ -169,7 +185,7 @@ jobs:
               .reverse()
               .find((review) => review.user?.login === reviewerLogin);
 
-            const slackUser = String(
+            const slackUser = sanitizeAuditText(
               firstDefined(
                 payload.slack_user,
                 payload.user,
@@ -178,7 +194,7 @@ jobs:
                 payload.event?.user
               ) || "unknown"
             );
-            const channelNote = channel ? ` in Slack channel "${channel}"` : "";
+            const channelNote = channel ? ` in Slack channel "${sanitizedChannel}"` : "";
 
             if (reaction === "white_check_mark") {
               const alreadyApprovedByAction = latestReviewByAction?.state === "APPROVED";
