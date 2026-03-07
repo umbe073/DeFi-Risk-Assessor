@@ -18,7 +18,7 @@ on:
         required: false
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -165,6 +165,9 @@ jobs:
               pull_number: prNumber,
               per_page: 100,
             });
+            const latestReviewByAction = [...reviews]
+              .reverse()
+              .find((review) => review.user?.login === reviewerLogin);
 
             const slackUser = String(
               firstDefined(
@@ -178,9 +181,7 @@ jobs:
             const channelNote = channel ? ` in Slack channel "${channel}"` : "";
 
             if (reaction === "white_check_mark") {
-              const alreadyApprovedByAction = reviews.some(
-                (review) => review.user?.login === reviewerLogin && review.state === "APPROVED"
-              );
+              const alreadyApprovedByAction = latestReviewByAction?.state === "APPROVED";
               if (!alreadyApprovedByAction) {
                 await github.rest.pulls.createReview({
                   owner,
@@ -221,9 +222,7 @@ jobs:
               return;
             }
 
-            const alreadyRequestedChangesByAction = reviews.some(
-              (review) => review.user?.login === reviewerLogin && review.state === "CHANGES_REQUESTED"
-            );
+            const alreadyRequestedChangesByAction = latestReviewByAction?.state === "CHANGES_REQUESTED";
             if (!alreadyRequestedChangesByAction) {
               await github.rest.pulls.createReview({
                 owner,
