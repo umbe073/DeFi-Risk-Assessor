@@ -1,20 +1,22 @@
 name: Process PR From Slack Reaction
 
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: Pull request number to approve
-        required: true
+        description: "Pull request number"
+        required: false
       reaction:
-        description: "Slack reaction name (for example :white_check_mark: or :no_entry:)"
+        description: "Slack reaction name (white_check_mark or no_entry)"
         required: true
       slack_user:
-        description: Slack user id or username who added the reaction
+        description: "Slack user id/name that reacted"
         required: false
       slack_channel:
-        description: Slack channel name or id
+        description: "Slack channel id/name where reaction occurred"
+        required: false
+      event_ts:
+        description: "Slack event timestamp"
         required: false
 
 permissions:
@@ -22,42 +24,34 @@ permissions:
   pull-requests: write
 
 jobs:
-  process-reaction:
+  process:
     runs-on: ubuntu-latest
     steps:
-      - name: Process approval/rejection reaction
+      - name: Process Slack reaction
         uses: actions/github-script@v7
         env:
-          ALLOWED_SLACK_CHANNELS: github_pull_requests
-          MERGE_METHOD: squash
+          ALLOWED_SLACK_CHANNELS: ${{ vars.ALLOWED_SLACK_CHANNELS }}
+          MERGE_METHOD: ${{ vars.SLACK_PR_MERGE_METHOD }}
+          DELETE_BRANCH: ${{ vars.SLACK_PR_DELETE_BRANCH }}
+          CURSOR_PR_AUTOMATION_TOKEN_SET: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' }}
         with:
           github-token: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' && secrets.CURSOR_PR_AUTOMATION_TOKEN || github.token }}
           script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-
-            function firstDefined(...values) {
+            const asLower = (v) => String(v || "").trim().toLowerCase();
+            const firstDefined = (...values) => {
               for (const value of values) {
-                if (value !== undefined && value !== null && String(value).trim() !== "") {
-                  return value;
-                }
+                if (value !== undefined && value !== null && String(value).trim() !== "") return value;
               }
               return undefined;
-            }
-
-            function toPositiveInteger(value) {
+            };
+            const toPositiveInt = (value) => {
               if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
-              if (typeof value === "string" && /^[1-9]\d*$/.test(value.trim())) return Number(value.trim());
+              if (typeof value === "string" && /^[0-9]+$/.test(value.trim())) return Number(value.trim());
               return null;
-            }
-
-            function normalizeReaction(value) {
+            };
+            const normalizeReaction = (value) => {
               if (typeof value !== "string") return "";
-              const trimmed = value.trim();
-              if (!trimmed) return "";
-              if (trimmed === "✅") return "white_check_mark";
-              if (trimmed === "⛔" || trimmed === "🚫") return "no_entry";
-              const key = trimmed.replace(/^:+|:+$/g, "").toLowerCase();
+              const trimmed = value.trim().replace(/^:+|:+$/g, "").toLowerCase();
               const aliases = {
                 "white_check_mark": "white_check_mark",
                 "white-check-mark": "white_check_mark",
@@ -69,135 +63,161 @@ jobs:
                 "no-entry": "no_entry",
                 "no_entry_sign": "no_entry",
                 "no-entry-sign": "no_entry",
+                "stop_sign": "no_entry",
+                "stop-sign": "no_entry",
               };
-              return aliases[key] || key;
-            }
-
-            function normalizeChannel(value) {
+              return aliases[trimmed] || trimmed;
+            };
+            const normalizeChannel = (value) => {
               if (typeof value !== "string") return "";
               return value.trim().replace(/^#/, "").toLowerCase();
-            }
+            };
+            const isTruthy = (value) => /^(1|true|yes|on)$/i.test(String(value || "").trim());
+            const logReason = (key, message) => core.notice(`[${key}] ${message}`);
 
-            const payload = context.eventName === "workflow_dispatch"
-              ? {
-                  pr_number: core.getInput("pr_number"),
-                  reaction: core.getInput("reaction"),
-                  slack_user: core.getInput("slack_user"),
-                  slack_channel: core.getInput("slack_channel"),
-                }
-              : (context.payload.client_payload || {});
-
+            const payload = context.payload?.inputs || context.payload?.client_payload || {};
             const reaction = normalizeReaction(
               firstDefined(
                 payload.reaction,
                 payload.emoji,
                 payload.reaction_name,
                 payload.event?.reaction,
-                payload.event?.item?.reaction,
-                payload.slack?.reaction
-              )
+                payload.slack?.reaction,
+              ),
             );
-
             if (!["white_check_mark", "no_entry"].includes(reaction)) {
-              core.notice(`Ignoring unsupported reaction: "${reaction || "unknown"}"`);
+              logReason("ignored_reaction", `Unsupported reaction "${reaction || "unknown"}".`);
               return;
             }
 
-            const prNumber = toPositiveInteger(
+            const prNumber = toPositiveInt(
               firstDefined(
                 payload.pr_number,
-                payload.pull_request?.number,
+                payload.pull_request_number,
                 payload.pr?.number,
-                payload.number
-              )
+                payload.number,
+                payload.event?.item?.pr_number,
+              ),
             );
-
             if (!prNumber) {
-              core.setFailed("Missing valid pull request number in dispatch payload.");
+              core.setFailed("[missing_pr_number] Missing valid pull request number in dispatch payload.");
               return;
             }
 
             const channel = String(
               firstDefined(
                 payload.slack_channel,
-                payload.channel_name,
-                payload.channelName,
                 payload.channel,
-                payload.event?.channel,
                 payload.event?.item?.channel,
-                payload.slack?.channel
-              ) || ""
-            ).trim();
-            const allowedChannels = (process.env.ALLOWED_SLACK_CHANNELS || "")
-              .split(",")
-              .map((name) => normalizeChannel(name))
-              .filter(Boolean);
+                payload.event?.channel,
+              ) || "",
+            );
             const normalizedChannel = normalizeChannel(channel);
+            const allowedChannels = String(process.env.ALLOWED_SLACK_CHANNELS || "")
+              .split(",")
+              .map((v) => normalizeChannel(v))
+              .filter(Boolean);
+
             if (allowedChannels.length > 0 && (!normalizedChannel || !allowedChannels.includes(normalizedChannel))) {
-              core.notice(
-                channel
-                  ? `Ignoring reaction from unauthorized channel "${channel}".`
-                  : "Ignoring reaction with missing Slack channel."
+              logReason(
+                "ignored_channel",
+                `Reaction channel "${channel || "unknown"}" not in ALLOWED_SLACK_CHANNELS (${allowedChannels.join(", ")}).`,
               );
               return;
             }
 
-            const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
-            if (pr.data.state !== "open") {
-              core.notice(`PR #${prNumber} is not open; nothing to process.`);
+            const slackUser = String(
+              firstDefined(payload.slack_user, payload.user, payload.event?.user, payload.actor) || "unknown",
+            );
+
+            const usingAutomationToken = String(process.env.CURSOR_PR_AUTOMATION_TOKEN_SET || "").toLowerCase() === "true";
+            if (!usingAutomationToken) {
+              logReason(
+                "missing_token",
+                "CURSOR_PR_AUTOMATION_TOKEN is not set. Approvals may be created by github-actions[bot] and not count.",
+              );
+            }
+
+            const { owner, repo } = context.repo;
+            const pr = (await github.rest.pulls.get({ owner, repo, pull_number: prNumber })).data;
+
+            if (pr.state !== "open") {
+              logReason("not_open", `PR #${prNumber} is "${pr.state}", nothing to process.`);
+              return;
+            }
+            if (pr.draft) {
+              logReason("draft_pr", `PR #${prNumber} is draft; convert to ready first.`);
               return;
             }
 
             let reviewerLogin = "github-actions[bot]";
             try {
-              const { data: authenticatedUser } = await github.rest.users.getAuthenticated();
-              if (authenticatedUser?.login) reviewerLogin = authenticatedUser.login;
+              const me = await github.rest.users.getAuthenticated();
+              if (me?.data?.login) reviewerLogin = me.data.login;
             } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              core.warning(
-                `Failed to determine authenticated reviewer; defaulting to "${reviewerLogin}": ${message}`
+              logReason("auth_lookup_failed", `Could not resolve authenticated reviewer login: ${String(error)}`);
+            }
+
+            let reviewerPermission = "unknown";
+            try {
+              const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: reviewerLogin,
+              });
+              reviewerPermission = String(perm?.data?.permission || "unknown");
+            } catch (error) {
+              logReason("perm_lookup_failed", `Could not fetch permission for ${reviewerLogin}: ${String(error)}`);
+            }
+            if (!["admin", "maintain", "write"].includes(asLower(reviewerPermission))) {
+              logReason(
+                "review_not_counted",
+                `Reviewer ${reviewerLogin} has permission "${reviewerPermission}". Approval may not satisfy branch rules.`,
               );
             }
 
-            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+            const reviews = (await github.paginate(github.rest.pulls.listReviews, {
               owner,
               repo,
               pull_number: prNumber,
               per_page: 100,
-            });
-            const latestReviewByAction = [...reviews]
-              .reverse()
-              .find((review) => review.user?.login === reviewerLogin);
-
-            const slackUser = String(
-              firstDefined(
-                payload.slack_user,
-                payload.user,
-                payload.user_name,
-                payload.username,
-                payload.event?.user
-              ) || "unknown"
-            );
-            const channelNote = channel ? ` in Slack channel "${channel}"` : "";
+            })) || [];
+            const latestByReviewer = [...reviews].reverse().find((r) => r?.user?.login === reviewerLogin);
+            const channelNote = channel ? ` in channel "${channel}"` : "";
 
             if (reaction === "white_check_mark") {
-              const alreadyApprovedByAction = latestReviewByAction?.state === "APPROVED";
-              if (!alreadyApprovedByAction) {
+              if (latestByReviewer?.state !== "APPROVED") {
                 await github.rest.pulls.createReview({
                   owner,
                   repo,
                   pull_number: prNumber,
                   event: "APPROVE",
-                  body: `Approved from Slack :white_check_mark: reaction by "${slackUser}"${channelNote}.`,
+                  body: `Approved from Slack ✅ reaction by "${slackUser}"${channelNote}.`,
                 });
               } else {
-                core.notice(`PR #${prNumber} is already approved by ${reviewerLogin}.`);
+                logReason("already_approved", `PR #${prNumber} already has APPROVED review by ${reviewerLogin}.`);
               }
 
-              const mergeMethodInput = String(process.env.MERGE_METHOD || "squash").toLowerCase().trim();
+              const refreshed = (await github.paginate(github.rest.pulls.listReviews, {
+                owner,
+                repo,
+                pull_number: prNumber,
+                per_page: 100,
+              })) || [];
+              const latestAfter = [...refreshed].reverse().find((r) => r?.user?.login === reviewerLogin);
+              if (latestAfter?.state !== "APPROVED") {
+                logReason(
+                  "review_not_counted",
+                  `Approval review from ${reviewerLogin} not visible after createReview; merge aborted.`,
+                );
+                return;
+              }
+
+              const mergeMethodInput = asLower(process.env.MERGE_METHOD || "squash");
               const mergeMethod = ["merge", "squash", "rebase"].includes(mergeMethodInput)
                 ? mergeMethodInput
                 : "squash";
+
               try {
                 const mergeResult = await github.rest.pulls.merge({
                   owner,
@@ -205,34 +225,55 @@ jobs:
                   pull_number: prNumber,
                   merge_method: mergeMethod,
                 });
-                if (mergeResult.data.merged) {
-                  core.notice(`Approved and merged PR #${prNumber} from Slack reaction.`);
-                } else {
-                  core.notice(`PR #${prNumber} approved, but merge API returned not merged.`);
+                if (!mergeResult?.data?.merged) {
+                  logReason(
+                    "merge_not_done",
+                    `GitHub API returned merged=false for PR #${prNumber}. message="${mergeResult?.data?.message || ""}"`,
+                  );
+                  return;
                 }
+                logReason("merged", `PR #${prNumber} merged by ${reviewerLogin} using ${mergeMethod}.`);
               } catch (error) {
-                const status = error?.status;
-                const apiMessage = String(error?.response?.data?.message || error?.message || error);
+                const status = Number(error?.status || 0);
+                const message = String(error?.response?.data?.message || error?.message || error);
                 if ([405, 409, 422].includes(status)) {
-                  core.notice(`PR #${prNumber} approved, but could not be auto-merged: ${apiMessage}`);
+                  logReason("merge_blocked", `PR #${prNumber} could not be auto-merged: ${message}`);
                   return;
                 }
                 throw error;
               }
+
+              if (isTruthy(process.env.DELETE_BRANCH || "true")) {
+                try {
+                  if (pr.head.ref !== pr.base.ref) {
+                    await github.rest.git.deleteRef({
+                      owner,
+                      repo,
+                      ref: `heads/${pr.head.ref}`,
+                    });
+                    logReason("branch_deleted", `Deleted merged branch "${pr.head.ref}".`);
+                  } else {
+                    logReason("skip_delete_branch", `Head and base are identical ("${pr.head.ref}"), skip delete.`);
+                  }
+                } catch (error) {
+                  const status = Number(error?.status || 0);
+                  const message = String(error?.response?.data?.message || error?.message || error);
+                  logReason("delete_branch_failed", `Could not delete branch "${pr.head.ref}": [${status}] ${message}`);
+                }
+              }
               return;
             }
 
-            const alreadyRequestedChangesByAction = latestReviewByAction?.state === "CHANGES_REQUESTED";
-            if (!alreadyRequestedChangesByAction) {
+            if (latestByReviewer?.state !== "CHANGES_REQUESTED") {
               await github.rest.pulls.createReview({
                 owner,
                 repo,
                 pull_number: prNumber,
                 event: "REQUEST_CHANGES",
-                body: `Rejected from Slack :no_entry: reaction by "${slackUser}"${channelNote}.`,
+                body: `Rejected from Slack ⛔️ reaction by "${slackUser}"${channelNote}.`,
               });
             } else {
-              core.notice(`PR #${prNumber} already has requested changes from ${reviewerLogin}.`);
+              logReason("already_requested_changes", `PR #${prNumber} already has CHANGES_REQUESTED by ${reviewerLogin}.`);
             }
 
             await github.rest.pulls.update({
@@ -241,4 +282,4 @@ jobs:
               pull_number: prNumber,
               state: "closed",
             });
-            core.notice(`Rejected and closed PR #${prNumber} from Slack reaction.`);
+            logReason("closed", `PR #${prNumber} closed after Slack ⛔️ reaction by "${slackUser}"${channelNote}.`);
