@@ -16,3 +16,11 @@ AML / Compliance analysts who need to interpret scores and understand why a toke
 Quant and DeFi researchers who want to audit or extend scoring logic.
 Exchange listing / risk teams who need repeatable onboarding criteria.
 Engineers integrating the suite into dashboards, monitoring pipelines or case‑management tools.
+
+## GitHub auto-PR workflow setup
+
+The `Auto Open PR From Cursor Branches` workflow can create pull requests from `cursor/**` branches.
+If your repository blocks PR creation by `GITHUB_TOKEN`, configure one of the following:
+
+- Preferred workaround: add repository secret `CURSOR_PR_AUTOMATION_TOKEN` with a PAT that can open PRs in this repo.
+- Alternative: in repository settings, enable **Allow GitHub Actions to create and approve pull requests**.
