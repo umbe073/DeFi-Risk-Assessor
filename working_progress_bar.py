@@ -11,7 +11,6 @@ import threading
 import subprocess
 from typing import Optional
 import shutil
-import glob
 import base64
 
 class WorkingProgressBar:
@@ -20,6 +19,14 @@ class WorkingProgressBar:
     Uses a simple GUI window that updates in real-time
     """
     
+    LOGO_FILES = [
+        ("1inch-exchange-logo.png", "image/png"),
+        ("bitquery-logo.jpg", "image/jpeg"),
+        ("coingecko logo.png", "image/png"),
+        ("defillama-logo.jpg", "image/jpeg"),
+        ("450px-EtherScan-Logo.png", "image/png"),
+    ]
+
     def __init__(self, total_tokens: int, title: str = "DeFi Risk Assessment"):
         self.total_tokens = total_tokens
         self.title = title
@@ -42,20 +49,27 @@ class WorkingProgressBar:
         # Create the progress bar window
         self._create_progress_window()
     
-    def _get_logo_data_urls(self):
-        # Read base64 logo files and return data URLs
-        logo_files = [
-            ("1inch-exchange-logo.png", "/tmp/1inch-exchange-logo.b64", "image/png"),
-            ("bitquery-logo.jpg", "/tmp/bitquery-logo.b64", "image/jpeg"),
-            ("coingecko logo.png", "/tmp/coingecko logo.b64", "image/png"),
-            ("defillama-logo.jpg", "/tmp/defillama-logo.b64", "image/jpeg"),
-            ("450px-EtherScan-Logo.png", "/tmp/450px-EtherScan-Logo.b64", "image/png"),
-        ]
+    def _get_logo_data_urls(self, logo_dir: Optional[str] = None):
+        # Read logo images and convert them to data URLs.
+        # Legacy .b64 files are still supported as a fallback.
         data_urls = []
-        for name, b64_path, mime in logo_files:
+        for name, mime in self.LOGO_FILES:
             try:
-                with open(b64_path, "r") as f:
-                    b64 = f.read().replace("\n", "")
+                image_candidates = []
+                if logo_dir:
+                    image_candidates.append(os.path.join(logo_dir, name))
+                image_candidates.append(os.path.join("/tmp", name))
+
+                image_path = next((path for path in image_candidates if os.path.exists(path)), None)
+                if image_path:
+                    with open(image_path, "rb") as image_file:
+                        b64 = base64.b64encode(image_file.read()).decode("ascii")
+                    data_urls.append(f"data:{mime};base64,{b64}")
+                    continue
+
+                legacy_b64_path = os.path.join("/tmp", f"{os.path.splitext(name)[0]}.b64")
+                with open(legacy_b64_path, "r", encoding="utf-8") as b64_file:
+                    b64 = b64_file.read().replace("\n", "")
                 data_urls.append(f"data:{mime};base64,{b64}")
             except Exception:
                 data_urls.append("")
@@ -71,14 +85,7 @@ class WorkingProgressBar:
                 os.path.abspath(os.path.join(script_dir, "..", "docs", "Logos")),
             ]
             logo_dir = next((path for path in logo_dir_candidates if os.path.isdir(path)), logo_dir_candidates[0])
-            logo_files = [
-                '1inch-exchange-logo.png',
-                'bitquery-logo.jpg',
-                'coingecko logo.png',
-                'defillama-logo.jpg',
-                '450px-EtherScan-Logo.png',
-            ]
-            for logo in logo_files:
+            for logo, _mime in self.LOGO_FILES:
                 src = os.path.join(logo_dir, logo)
                 dst = os.path.join('/tmp', logo)
                 if os.path.exists(src):
@@ -87,7 +94,7 @@ class WorkingProgressBar:
             # Only add meta refresh if not finished
             meta_refresh = '<meta http-equiv="refresh" content="1">' if self.completed_phases < self.total_phases else ''
 
-            logo_data_urls = self._get_logo_data_urls()
+            logo_data_urls = self._get_logo_data_urls(logo_dir=logo_dir)
 
             html_content = f"""
             <!DOCTYPE html>
