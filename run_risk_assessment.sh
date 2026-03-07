@@ -38,6 +38,48 @@ resolve_python() {
     return 1
 }
 
+check_dependencies() {
+    local required_modules=(
+        "pandas"
+        "numpy"
+        "requests"
+        "dotenv"
+        "diskcache"
+        "web3"
+        "eth_utils"
+        "openpyxl"
+    )
+
+    local missing_modules
+    missing_modules="$("$PYTHON_BIN" - <<'PY'
+import importlib.util
+
+required = [
+    "pandas",
+    "numpy",
+    "requests",
+    "dotenv",
+    "diskcache",
+    "web3",
+    "eth_utils",
+    "openpyxl",
+]
+missing = [name for name in required if importlib.util.find_spec(name) is None]
+print(" ".join(missing))
+PY
+)"
+
+    if [ -n "$missing_modules" ]; then
+        echo ""
+        echo "❌ Missing Python dependencies: $missing_modules"
+        echo "Install project requirements with:"
+        echo "  \"$PYTHON_BIN\" -m pip install -r \"$SCRIPT_DIR/requirements.txt\""
+        return 1
+    fi
+
+    return 0
+}
+
 # Check if Python script exists
 if [ ! -f "$SCRIPT_FILE" ]; then
     echo "Error: $SCRIPT_FILE not found in $SCRIPT_DIR"
@@ -53,6 +95,8 @@ PYTHON_BIN="$(resolve_python)" || {
     echo "Please set PYTHON_PATH or activate a virtual environment before running."
     exit 1
 }
+
+check_dependencies || exit 1
 
 echo "🚀 Launching DeFi Risk Assessment Tool..."
 echo "📁 Working directory: $SCRIPT_DIR"
