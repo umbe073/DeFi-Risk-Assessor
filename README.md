@@ -39,3 +39,4 @@ The `Approve PR From Slack Reaction` workflow approves an open pull request when
   - `slack_user` and `slack_channel` for audit text in the approval review
 
 Default channel filter is `github_pull_requests`. If your Slack integration sends a different channel name or ID, update `ALLOWED_SLACK_CHANNELS` in `.github/workflows/approve-pr-from-slack-reaction.yml`.
+When `ALLOWED_SLACK_CHANNELS` is set, the dispatch payload must include a matching channel value.

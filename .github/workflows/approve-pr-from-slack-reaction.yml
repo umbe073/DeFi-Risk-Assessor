@@ -126,8 +126,13 @@ jobs:
               .split(",")
               .map((name) => normalizeChannel(name))
               .filter(Boolean);
-            if (channel && allowedChannels.length > 0 && !allowedChannels.includes(normalizeChannel(channel))) {
-              core.notice(`Ignoring reaction from unauthorized channel "${channel}".`);
+            const normalizedChannel = normalizeChannel(channel);
+            if (allowedChannels.length > 0 && (!normalizedChannel || !allowedChannels.includes(normalizedChannel))) {
+              core.notice(
+                channel
+                  ? `Ignoring reaction from unauthorized channel "${channel}".`
+                  : "Ignoring reaction with missing Slack channel."
+              );
               return;
             }
 
