@@ -28,7 +28,18 @@ resolve_python() {
         return 0
     fi
 
-    # 3) Fallback to system python3
+    # 3) Repository-local virtualenvs (common for non-activated shells)
+    if [ -x "$SCRIPT_DIR/.venv/bin/python3" ]; then
+        echo "$SCRIPT_DIR/.venv/bin/python3"
+        return 0
+    fi
+
+    if [ -x "$SCRIPT_DIR/venv/bin/python3" ]; then
+        echo "$SCRIPT_DIR/venv/bin/python3"
+        return 0
+    fi
+
+    # 4) Fallback to system python3
     if command -v python3 >/dev/null 2>&1; then
         command -v python3
         return 0
