@@ -48,6 +48,7 @@ print("[DEBUG] Excel report path:", EXCEL_REPORT_PATH)
 TOKENS_CSV = os.path.join(DATA_DIR, 'tokens.csv')
 CMC_SYMBOL_MAP = os.path.join(DATA_DIR, 'cmc_symbol_map.json')
 FALLBACKS_JSON = os.path.join(DATA_DIR, 'fallbacks.json')
+FALLBACKS_JSON_SHA256 = f"{FALLBACKS_JSON}.sha256"
 RISK_REPORT_JSON = os.path.join(DATA_DIR, 'risk_report.json')
 RISK_REPORT_CSV = os.path.join(DATA_DIR, 'risk_report.csv')
 API_CACHE_DIR = os.path.join(DATA_DIR, 'api_cache')
@@ -95,6 +96,127 @@ logging.info(COINGECKO_ATTRIBUTION)
 
 # Load environment variables from .env file
 load_dotenv()
+
+# --- Fallback integrity and sanitization helpers ---
+def _is_valid_token_address(value):
+    if not isinstance(value, str):
+        return False
+    value = value.strip()
+    if len(value) != 42 or not value.startswith("0x"):
+        return False
+    return all(c in "0123456789abcdefABCDEF" for c in value[2:])
+
+
+def _to_non_negative_float(value, default=0.0):
+    try:
+        converted = float(value)
+        if converted < 0:
+            return default
+        return converted
+    except Exception:
+        return default
+
+
+def _to_non_negative_int(value, default=0):
+    try:
+        converted = int(float(value))
+        if converted < 0:
+            return default
+        return converted
+    except Exception:
+        return default
+
+
+def _to_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes"}:
+            return True
+        if lowered in {"false", "0", "no"}:
+            return False
+    return default
+
+
+def _sanitize_fallback_token_entry(entry):
+    if not isinstance(entry, dict):
+        return None
+    top10 = _to_non_negative_float(entry.get("top10_concentration", 0.0), 0.0)
+    top10 = min(top10, 100.0)
+    return {
+        "holders": _to_non_negative_int(entry.get("holders", 0), 0),
+        "liquidity": _to_non_negative_float(entry.get("liquidity", 0.0), 0.0),
+        "top10_concentration": top10,
+        "is_verified": _to_bool(entry.get("is_verified", False), False),
+        "contract_age_days": _to_non_negative_int(entry.get("contract_age_days", 0), 0),
+        "market_cap": _to_non_negative_float(entry.get("market_cap", 0.0), 0.0),
+        "volume_24h": _to_non_negative_float(entry.get("volume_24h", 0.0), 0.0),
+        "price_usd": _to_non_negative_float(entry.get("price_usd", 0.0), 0.0),
+    }
+
+
+def sanitize_fallbacks_payload(raw_fallbacks):
+    sanitized = {
+        "version": "1.0",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "tokens": {},
+    }
+    if not isinstance(raw_fallbacks, dict):
+        return sanitized
+
+    version = raw_fallbacks.get("version")
+    if isinstance(version, str) and version.strip():
+        sanitized["version"] = version.strip()
+
+    timestamp = raw_fallbacks.get("timestamp")
+    if isinstance(timestamp, str) and timestamp.strip():
+        sanitized["timestamp"] = timestamp.strip()
+
+    raw_tokens = raw_fallbacks.get("tokens", {})
+    if not isinstance(raw_tokens, dict):
+        return sanitized
+
+    for token_address, token_entry in raw_tokens.items():
+        if not _is_valid_token_address(token_address):
+            continue
+        sanitized_entry = _sanitize_fallback_token_entry(token_entry)
+        if sanitized_entry is None:
+            continue
+        sanitized["tokens"][token_address.lower()] = sanitized_entry
+
+    return sanitized
+
+
+def _fallbacks_digest(payload):
+    canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+
+
+def write_fallbacks_with_integrity(payload):
+    sanitized_payload = sanitize_fallbacks_payload(payload)
+    digest = _fallbacks_digest(sanitized_payload)
+    with open(FALLBACKS_JSON, "w") as f:
+        json.dump(sanitized_payload, f, indent=2, sort_keys=True)
+    with open(FALLBACKS_JSON_SHA256, "w") as f:
+        f.write(f"{digest}\n")
+    return sanitized_payload
+
+
+def load_fallbacks_with_integrity():
+    with open(FALLBACKS_JSON, "r") as f:
+        raw_fallbacks = json.load(f)
+    sanitized_fallbacks = sanitize_fallbacks_payload(raw_fallbacks)
+
+    with open(FALLBACKS_JSON_SHA256, "r") as f:
+        expected_digest = f.read().strip()
+
+    actual_digest = _fallbacks_digest(sanitized_fallbacks)
+    if not expected_digest or expected_digest != actual_digest:
+        raise ValueError("fallbacks.json integrity check failed (digest mismatch).")
+
+    return sanitized_fallbacks
+
 
 # --- Automated fallback update ---
 def fetch_and_update_fallbacks():
@@ -400,8 +522,7 @@ def fetch_and_update_fallbacks():
             print(f"  Volume 24h: ${token_data['volume_24h']:,.0f}")
             print(f"  Price: ${token_data['price_usd']:.6f}")
         
-        with open(FALLBACKS_JSON, 'w') as f:
-            json.dump(new_fallbacks, f, indent=2)
+        write_fallbacks_with_integrity(new_fallbacks)
         print(f"\n✓ Fallbacks updated with REAL data from all available APIs")
         logging.info("Fallbacks updated with real data from all available APIs")
     except Exception as e:
@@ -413,8 +534,7 @@ def fetch_and_update_fallbacks():
 def update_fallbacks_if_needed():
     """Check fallbacks.json timestamp and update if older than 7 days."""
     try:
-        with open(FALLBACKS_JSON, 'r') as f:
-            fallbacks = json.load(f)
+        fallbacks = load_fallbacks_with_integrity()
         ts = fallbacks.get('timestamp')
         if ts:
             ts_date = datetime.datetime.fromisoformat(ts.replace('Z', '+00:00'))
@@ -422,8 +542,8 @@ def update_fallbacks_if_needed():
                 print("Fallbacks are older than 7 days. Updating...")
                 fetch_and_update_fallbacks()
     except Exception as e:
-        print(f"Error checking/updating fallbacks.json: {e}")
-        logging.error(f"Error checking/updating fallbacks.json: {e}")
+        print(f"Error checking/updating fallbacks.json integrity: {e}")
+        logging.error(f"Error checking/updating fallbacks.json integrity: {e}")
 
 update_fallbacks_if_needed()
 
@@ -749,8 +869,7 @@ class DeFiRiskAssessor:
         self.bitquery_available = True
 
         try:
-            with open(FALLBACKS_JSON, 'r') as f:
-                self.fallbacks = json.load(f)
+            self.fallbacks = load_fallbacks_with_integrity()
             # Check timestamp
             ts = self.fallbacks.get('timestamp')
             if ts:
@@ -761,8 +880,8 @@ class DeFiRiskAssessor:
                 except Exception as e:
                     print(f"Warning: Could not parse timestamp in fallbacks.json: {e}")
         except Exception as e:
-            print(f"Warning: Could not load fallbacks.json: {e}. Fallbacks will be empty.")
-            self.fallbacks = {'tokens': {}}
+            print(f"Warning: Could not load trusted fallbacks.json data: {e}. Fallbacks will be empty.")
+            self.fallbacks = {'version': '1.0', 'tokens': {}}
         
         try:
             with open(CMC_SYMBOL_MAP, 'r') as f:
@@ -850,7 +969,10 @@ class DeFiRiskAssessor:
         if chain not in self.CHAIN_CONFIG:
             if fallback:
                 print(f"[Fallback] Using fallback holder data for {token_address} on {chain}: {fallback}")
-            return {'total_holders': fallback['holders'] if fallback else 0, 'top10_concentration': fallback['top10_concentration'] if fallback else 100}
+            return {
+                'total_holders': fallback.get('holders', 0) if fallback else 0,
+                'top10_concentration': fallback.get('top10_concentration', 100) if fallback else 100
+            }
         # Step 1: Try real-time APIs (Etherscan, Breadcrumbs, Ethplorer)
         total_holders = 0
         top10_concentration = 100
@@ -936,8 +1058,8 @@ class DeFiRiskAssessor:
         if (not total_holders or total_holders == 0 or top10_concentration == 100) and fallback:
             print(f"[Fallback] Using fallback concentration data for {token_address} on {chain}: {fallback}")
             return {
-                'total_holders': fallback['holders'],
-                'top10_concentration': fallback['top10_concentration']
+                'total_holders': fallback.get('holders', 0),
+                'top10_concentration': fallback.get('top10_concentration', 100)
             }
         return {
             'total_holders': total_holders,
@@ -979,7 +1101,7 @@ class DeFiRiskAssessor:
         if chain not in self.CHAIN_CONFIG:
             if fallback:
                 print(f"[Fallback] Using fallback liquidity data for {token_address} on {chain}: {fallback}")
-            return fallback['liquidity'] if fallback else 0
+            return fallback.get('liquidity', 0) if fallback else 0
         # Step 1: Try real-time APIs (CoinGecko, Breadcrumbs, Ethplorer)
         liquidity = 0
         # Try CoinGecko
@@ -1047,7 +1169,7 @@ class DeFiRiskAssessor:
         # Fallback if all real-time sources failed or returned zero/invalid
         if (not liquidity or liquidity == 0) and fallback:
             print(f"[Fallback] Using fallback liquidity data for {token_address} on {chain}: {fallback}")
-            return fallback['liquidity']
+            return fallback.get('liquidity', 0)
         return liquidity
     
     def fetch_onchain_data(self, token_address, chain):
@@ -1411,7 +1533,7 @@ class DeFiRiskAssessor:
                         # Try to load from fallback data
                         fallback = self.fallbacks.get('tokens', {}).get(token_address.lower())
                         if fallback and 'liquidity' in fallback:
-                            data['coingecko']['market_data']['total_volume'] = {'usd': fallback['liquidity']}
+                            data['coingecko']['market_data']['total_volume'] = {'usd': fallback.get('liquidity', 0)}
                             logging.info(f"Used fallback liquidity for {token_address} from fallbacks.json.")
                         cg_data = None
                     else:
@@ -1430,7 +1552,7 @@ class DeFiRiskAssessor:
                 # Try to load from fallback data
                 fallback = self.fallbacks.get('tokens', {}).get(token_address.lower())
                 if fallback and 'liquidity' in fallback:
-                    data['coingecko']['market_data']['total_volume'] = {'usd': fallback['liquidity']}
+                    data['coingecko']['market_data']['total_volume'] = {'usd': fallback.get('liquidity', 0)}
                     logging.info(f"Used fallback liquidity for {token_address} from fallbacks.json.")
                 cg_data = None
             elif response.status_code != 404:
