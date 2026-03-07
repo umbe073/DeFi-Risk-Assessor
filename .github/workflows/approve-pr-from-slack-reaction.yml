@@ -73,12 +73,7 @@ jobs:
             }
 
             const payload = context.eventName === "workflow_dispatch"
-              ? {
-                  pr_number: core.getInput("pr_number"),
-                  reaction: core.getInput("reaction"),
-                  slack_user: core.getInput("slack_user"),
-                  slack_channel: core.getInput("slack_channel"),
-                }
+              ? (context.payload.inputs || {})
               : (context.payload.client_payload || {});
 
             const reaction = normalizeReaction(
