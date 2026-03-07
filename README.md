@@ -24,3 +24,19 @@ If your repository blocks PR creation by `GITHUB_TOKEN`, configure one of the fo
 
 - Preferred workaround: add repository secret `CURSOR_PR_AUTOMATION_TOKEN` with a PAT that can open PRs in this repo.
 - Alternative: in repository settings, enable **Allow GitHub Actions to create and approve pull requests**.
+
+## Manual PR approval from Slack reaction
+
+The `Approve PR From Slack Reaction` workflow approves an open pull request when it receives a Slack reaction payload containing `:white_check_mark:` (also accepts `✅`, `:heavy_check_mark:`, and `:check_mark:` aliases).
+
+- Accepted trigger events:
+  - `repository_dispatch` (event type can be chosen by your Slack bridge)
+  - `workflow_dispatch` for manual testing
+- Required payload fields:
+  - `pr_number` (or `pull_request.number`)
+  - `reaction` (or `emoji` / `reaction_name`)
+- Optional fields:
+  - `slack_user` and `slack_channel` for audit text in the approval review
+
+Default channel filter is `github_pull_requests`. If your Slack integration sends a different channel name or ID, update `ALLOWED_SLACK_CHANNELS` in `.github/workflows/approve-pr-from-slack-reaction.yml`.
+When `ALLOWED_SLACK_CHANNELS` is set, the dispatch payload must include a matching channel value.
