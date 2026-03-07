@@ -71,6 +71,31 @@ jobs:
             const normalizeChannel = (value) => {
               if (typeof value !== "string") return "";
               return value.trim().replace(/^#/, "").toLowerCase();
+            }
+
+            function sanitizeAuditText(value, maxLen = 120) {
+              let text = String(value || "");
+              if (!text) return "unknown";
+              text = text
+                .replace(/[\u0000-\u001F\u007F]/g, " ")
+                .replace(/<!?(?:here|channel|everyone)>/gi, "[redacted-mention]")
+                .replace(/\s+/g, " ")
+                .trim();
+              if (!text) return "unknown";
+              if (text.length > maxLen) {
+                return `${text.slice(0, Math.max(0, maxLen - 14)).trimEnd()}… [truncated]`;
+              }
+              return text;
+            }
+
+            const payload = context.eventName === "workflow_dispatch"
+              ? {
+                  pr_number: core.getInput("pr_number"),
+                  reaction: core.getInput("reaction"),
+                  slack_user: core.getInput("slack_user"),
+                  slack_channel: core.getInput("slack_channel"),
+                }
+              : (context.payload.client_payload || {});
             };
             const isTruthy = (value) => /^(1|true|yes|on)$/i.test(String(value || "").trim());
             const logReason = (key, message) => core.notice(`[${key}] ${message}`);
@@ -109,6 +134,11 @@ jobs:
                 payload.slack_channel,
                 payload.channel,
                 payload.event?.item?.channel,
+                payload.slack?.channel
+              ) || ""
+            ).trim();
+            const sanitizedChannel = sanitizeAuditText(channel);
+            const allowedChannels = (process.env.ALLOWED_SLACK_CHANNELS || "")
                 payload.event?.channel,
               ) || "",
             );
@@ -119,6 +149,10 @@ jobs:
               .filter(Boolean);
 
             if (allowedChannels.length > 0 && (!normalizedChannel || !allowedChannels.includes(normalizedChannel))) {
+              core.notice(
+                channel
+                  ? `Ignoring reaction from unauthorized channel "${sanitizedChannel}".`
+                  : "Ignoring reaction with missing Slack channel."
               logReason(
                 "ignored_channel",
                 `Reaction channel "${channel || "unknown"}" not in ALLOWED_SLACK_CHANNELS (${allowedChannels.join(", ")}).`,
@@ -181,6 +215,21 @@ jobs:
               repo,
               pull_number: prNumber,
               per_page: 100,
+            });
+            const latestReviewByAction = [...reviews]
+              .reverse()
+              .find((review) => review.user?.login === reviewerLogin);
+
+            const slackUser = sanitizeAuditText(
+              firstDefined(
+                payload.slack_user,
+                payload.user,
+                payload.user_name,
+                payload.username,
+                payload.event?.user
+              ) || "unknown"
+            );
+            const channelNote = channel ? ` in Slack channel "${sanitizedChannel}"` : "";
             })) || [];
             const latestByReviewer = [...reviews].reverse().find((r) => r?.user?.login === reviewerLogin);
             const channelNote = channel ? ` in channel "${channel}"` : "";
