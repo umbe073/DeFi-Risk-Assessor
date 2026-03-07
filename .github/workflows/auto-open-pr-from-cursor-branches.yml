@@ -5,6 +5,10 @@ on:
     branches:
       - "cursor/**"
 
+concurrency:
+  group: auto-open-pr-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
@@ -57,9 +61,18 @@ jobs:
               });
             } catch (error) {
               const apiMessage = error?.response?.data?.message || error.message || "";
+              const normalizedMessage = String(apiMessage).toLowerCase();
+              if (
+                error?.status === 422 &&
+                normalizedMessage.includes("a pull request already exists")
+              ) {
+                // A concurrent run may have created the PR first.
+                core.notice(`PR already exists for branch ${head}; nothing to do.`);
+                return;
+              }
               if (
                 error?.status === 403 &&
-                apiMessage.includes("not permitted to create or approve pull requests")
+                normalizedMessage.includes("not permitted to create or approve pull requests")
               ) {
                 const compareUrl = `https://github.com/${owner}/${repo}/compare/${base}...${head}?expand=1`;
                 core.warning(`Auto-creating PR is blocked by repository policy: ${apiMessage}`);
