@@ -5,6 +5,10 @@ on:
     branches:
       - "cursor/**"
 
+concurrency:
+  group: auto-open-pr-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   issues: write
@@ -16,12 +20,16 @@ jobs:
     steps:
       - name: Create PR if missing
         uses: actions/github-script@v7
+        env:
+          CURSOR_PR_TOKEN_SET: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' }}
         with:
+          github-token: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' && secrets.CURSOR_PR_AUTOMATION_TOKEN || github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const head = context.ref.replace("refs/heads/", "");
             const reviewerLogin = "degen-hodler";
+            const usingAutomationToken = process.env.CURSOR_PR_TOKEN_SET === "true";
 
             const ensureReviewerAndMention = async (pullNumber) => {
               let reviewerRequested = false;
@@ -118,16 +126,50 @@ jobs:
               "Manual GitHub review and merge required after checks complete.",
             ].join("\n");
 
-            const created = await github.rest.pulls.create({
-              owner,
-              repo,
-              title,
-              head,
-              base,
-              body,
-              draft: false,
-              maintainer_can_modify: true,
-            });
+            try {
+              const created = await github.rest.pulls.create({
+                owner,
+                repo,
+                title,
+                head,
+                base,
+                body,
+                draft: false,
+                maintainer_can_modify: true,
+              });
+              core.info(`Created PR #${created.data.number}: ${created.data.html_url}`);
+              await ensureReviewerAndMention(Number(created.data.number || 0));
+            } catch (error) {
+              const apiMessage = error?.response?.data?.message || error?.message || "";
+              const normalizedMessage = String(apiMessage).toLowerCase();
 
-            core.info(`Created PR #${created.data.number}: ${created.data.html_url}`);
-            await ensureReviewerAndMention(Number(created.data.number || 0));
+              if (
+                error?.status === 422 &&
+                normalizedMessage.includes("a pull request already exists")
+              ) {
+                core.notice(`PR already exists for branch ${head}; nothing to do.`);
+                return;
+              }
+
+              if (
+                error?.status === 403 &&
+                normalizedMessage.includes("not permitted to create or approve pull requests")
+              ) {
+                const compareUrl = `https://github.com/${owner}/${repo}/compare/${base}...${head}?expand=1`;
+                core.warning(`Auto-creating PR is blocked by repository policy: ${apiMessage}`);
+                if (!usingAutomationToken) {
+                  core.notice(
+                    "Set repository secret CURSOR_PR_AUTOMATION_TOKEN (PAT with repo scope) or enable " +
+                    '"Allow GitHub Actions to create and approve pull requests" under Actions settings.'
+                  );
+                } else {
+                  core.notice(
+                    "CURSOR_PR_AUTOMATION_TOKEN is configured but still blocked. Verify this token can create PRs in this repository."
+                  );
+                }
+                core.notice(`Open PR manually here: ${compareUrl}`);
+                return;
+              }
+
+              throw error;
+            }
