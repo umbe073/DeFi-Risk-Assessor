@@ -1,9 +1,9 @@
-name: Slack PR Ready For Manual Review
+name: Slack PR Review Completion Notification
 
 on:
-  check_suite:
+  pull_request_review:
     types:
-      - completed
+      - submitted
 
 permissions:
   contents: read
@@ -15,13 +15,13 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Notify Slack when all PR checks are complete/successful
+      - name: Notify Slack when PR review is finalized
         uses: actions/github-script@v7
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
         with:
           script: |
-            const NOTIFIED_CHECK_NAME = "Slack PR Ready Notification";
+            const NOTIFIED_CHECK_PREFIX = "Slack PR Review Ended Notification";
 
             const toLower = (v) => String(v || "").toLowerCase();
             const DANGEROUS_COMMAND_PATTERNS = [
@@ -53,30 +53,28 @@ jobs:
               if (text.length <= max) return text;
               return `${text.slice(0, Math.max(0, max - 14)).trimEnd()}… [truncated]`;
             };
-            const emojiForConclusion = (conclusion) => {
-              const c = toLower(conclusion);
-              if (c === "success") return "✅";
-              if (["neutral", "skipped"].includes(c)) return "⚪";
-              if (["failure", "timed_out", "cancelled", "action_required", "stale"].includes(c)) return "❌";
-              return "•";
-            };
-
             const webhook = process.env.SLACK_WEBHOOK_URL || "";
             if (!webhook) {
               core.warning("SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL is not configured; skipping.");
               return;
             }
 
-            const suite = context.payload.check_suite;
-            const prs = Array.isArray(suite?.pull_requests) ? suite.pull_requests : [];
-            if (prs.length === 0) {
-              core.info("No PR attached to this check suite.");
+            const prPayload = context.payload.pull_request;
+            const review = context.payload.review;
+            if (!prPayload || !review) {
+              core.info("This pull_request_review event has no pull request/review payload.");
               return;
             }
 
-            const prNumber = Number(prs[0].number || 0);
+            const prNumber = Number(prPayload.number || 0);
             if (!prNumber) {
               core.info("Invalid PR number.");
+              return;
+            }
+
+            const reviewState = toLower(review.state);
+            if (!["approved", "changes_requested"].includes(reviewState)) {
+              core.info(`Review state '${reviewState || "unknown"}' is not final for Slack notification.`);
               return;
             }
 
@@ -87,6 +85,28 @@ jobs:
               return;
             }
 
+            const reviewDecision = (
+              await github.graphql(
+                `
+                  query($owner: String!, $repo: String!, $number: Int!) {
+                    repository(owner: $owner, name: $repo) {
+                      pullRequest(number: $number) {
+                        reviewDecision
+                      }
+                    }
+                  }
+                `,
+                { owner, repo, number: pr.number },
+              )
+            )?.repository?.pullRequest?.reviewDecision || "";
+
+            const decision = toLower(reviewDecision);
+            if (!["approved", "changes_requested"].includes(decision)) {
+              core.info(`PR #${pr.number} review decision is not final yet: ${reviewDecision || "unknown"}.`);
+              return;
+            }
+
+            const notifiedCheckName = `${NOTIFIED_CHECK_PREFIX} (${decision})`;
             const checkRuns = (
               await github.rest.checks.listForRef({
                 owner,
@@ -95,59 +115,22 @@ jobs:
                 per_page: 100,
               })
             ).data.check_runs || [];
-
-            const pending = checkRuns.filter((r) => r.status !== "completed");
-            if (pending.length > 0) {
-              core.info(`PR #${pr.number} still has pending checks.`);
-              return;
-            }
-
             const alreadyNotified = checkRuns.some((r) =>
-              String(r.name || "") === NOTIFIED_CHECK_NAME &&
+              String(r.name || "") === notifiedCheckName &&
               String(r.status || "") === "completed" &&
               String(r.conclusion || "").toLowerCase() === "success",
             );
             if (alreadyNotified) {
-              core.info(`PR #${pr.number} has already been posted to Slack for ${pr.head.sha}.`);
+              core.info(`PR #${pr.number} decision '${decision}' already posted to Slack for ${pr.head.sha}.`);
               return;
             }
 
-            const failing = checkRuns.filter((r) => {
-              const c = String(r.conclusion || "").toLowerCase();
-              return !["success", "neutral", "skipped"].includes(c);
-            });
-            if (failing.length > 0) {
-              core.info(`PR #${pr.number} has failing checks.`);
-              return;
-            }
-
-            const codeqlRuns = checkRuns.filter((r) => toLower(r.name).includes("codeql"));
-            const bugbotRuns = checkRuns.filter((r) => toLower(r.name).includes("bugbot"));
-            if (codeqlRuns.length === 0) {
-              core.info(`PR #${pr.number} has no CodeQL checks yet.`);
-              return;
-            }
-            if (bugbotRuns.length === 0) {
-              core.info(`PR #${pr.number} has no Bugbot checks yet.`);
-              return;
-            }
-
-            const scanGood = codeqlRuns.filter((r) => toLower(r.conclusion) === "success").length;
-            const scanNeutral = codeqlRuns.filter((r) => ["neutral", "skipped"].includes(toLower(r.conclusion))).length;
-            const scanFailed = codeqlRuns.length - scanGood - scanNeutral;
-            const codeqlLines = codeqlRuns.map((r) => {
-              const c = toLower(r.conclusion) || "unknown";
-              return `- ${emojiForConclusion(c)} ${sanitizeUntrusted(r.name)}: ${c}`;
-            });
-
-            const bugbotLines = bugbotRuns.map((r) => {
-              const c = toLower(r.conclusion) || "unknown";
-              const outputTitle = truncate(r.output?.title || "", 90);
-              const outputSummary = truncate(r.output?.summary || "", 160);
-              const detailBits = [outputTitle, outputSummary].filter(Boolean).join(" | ");
-              const detail = detailBits ? ` — ${detailBits}` : "";
-              return `- ${emojiForConclusion(c)} ${sanitizeUntrusted(r.name)}: ${c}${detail}`;
-            });
+            const decisionEmoji = decision === "approved" ? "✅" : "❌";
+            const decisionTitle = decision === "approved" ? "Approved" : "Changes Requested";
+            const reviewUrl = sanitizeUntrusted(review.html_url || "");
+            const reviewer = sanitizeUntrusted(review.user?.login || "unknown");
+            const reviewBody = truncate(review.body || "No review body provided.", 900);
+            const reviewQuoted = reviewBody.split("\n").map((line) => `> ${line}`).join("\n");
 
             const files = (
               await github.rest.pulls.listFiles({
@@ -169,29 +152,23 @@ jobs:
 
             const payload = {
               text: [
-                "A PR is ready for manual review (CodeQL and Bugbot checks completed). Please review the request for changes:",
+                `${decisionEmoji} GitHub code review completed: *${decisionTitle}*`,
                 "",
                 `*PR:* <${pr.html_url}|#${pr.number} ${sanitizeUntrusted(pr.title)}>`,
                 `*Branch:* \`${sanitizeUntrusted(pr.head.ref)}\` → \`${sanitizeUntrusted(pr.base.ref)}\``,
                 `*Author:* \`${sanitizeUntrusted(pr.user?.login || "unknown")}\``,
+                `*Reviewer:* \`${reviewer}\``,
+                `*Review link:* <${reviewUrl}|Open review on GitHub>`,
                 `*Changed files:* ${Number(pr.changed_files || 0)} (+${Number(pr.additions || 0)} / -${Number(pr.deletions || 0)})`,
                 "",
-                "*Body of the request in details:*",
+                "*PR body:*",
                 bodyQuoted,
                 "",
-                "*Changes explained:*",
+                "*Review comment:*",
+                reviewQuoted,
+                "",
+                "*Changed files preview:*",
                 ...(fileLines.length > 0 ? fileLines : ["- No file metadata available."]),
-                "",
-                "*Description of the failed/neutral/good code scan:*",
-                `- Good: ${scanGood}`,
-                `- Neutral: ${scanNeutral}`,
-                `- Failed: ${scanFailed}`,
-                ...codeqlLines,
-                "",
-                "*Actions taken by Bugbot (if any):*",
-                ...(bugbotLines.length > 0 ? bugbotLines : ["- No Bugbot actions found."]),
-                "",
-                "Please review on GitHub and approve/merge manually when appropriate.",
               ].join("\n"),
             };
 
@@ -209,13 +186,13 @@ jobs:
             await github.rest.checks.create({
               owner,
               repo,
-              name: NOTIFIED_CHECK_NAME,
+              name: notifiedCheckName,
               head_sha: pr.head.sha,
               status: "completed",
               conclusion: "success",
               output: {
-                title: "Slack PR ready notification sent",
-                summary: `Posted PR #${pr.number} ready-for-approval message to Slack.`,
-                text: `Triggered by check_suite.id=${suite.id}.`,
+                title: "Slack PR review completion notification sent",
+                summary: `Posted PR #${pr.number} review outcome '${decision}' to Slack.`,
+                text: `Triggered by pull_request_review.id=${review.id}.`,
               },
             });
