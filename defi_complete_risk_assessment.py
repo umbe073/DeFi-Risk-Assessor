@@ -1133,22 +1133,28 @@ class DeFiRiskAssessor:
     
     def fetch_bitquery_data(self, token_address, chain):
         """Fetch on-chain data from BitQuery"""
+        empty_payload = {
+            "transfers": {"count": 0, "amount": 0},
+            "transactions": {"count": 0, "amount": 0}
+        }
         if not getattr(self, 'bitquery_available', True):
             if not hasattr(self, '_bitquery_warned'):
                 msg = "BitQuery API unavailable due to previous 401 error. Skipping BitQuery for all tokens and using fallback data."
                 print(msg)
                 logging.warning(msg)
                 self._bitquery_warned = True
-            return {
-                "transfers": {"count": 0, "amount": 0},
-                "transactions": {"count": 0, "amount": 0}
-            }
+            return empty_payload
         api_key = os.getenv("BITQUERY_API_KEY")
         if not api_key:
             print("BitQuery API key not configured, skipping BitQuery data")
             return {}
         api_key = api_key.strip()  # Remove whitespace
-        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+        # Try both supported auth schemes to avoid false "unauthorized" failures
+        # when environments are configured for only one header style.
+        header_candidates = [
+            {"Content-Type": "application/json", "X-API-KEY": api_key},
+            {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        ]
             
         # Map chain to BitQuery's network identifier
         network_map = {
@@ -1157,10 +1163,7 @@ class DeFiRiskAssessor:
         }
         
         if chain not in network_map:
-            return {
-                "transfers": {"count": 0, "amount": 0},
-                "transactions": {"count": 0, "amount": 0}
-            }
+            return empty_payload
             
         query = """
         {
@@ -1184,11 +1187,16 @@ class DeFiRiskAssessor:
         """ % (network_map[chain], network_map[chain], token_address, token_address)
         
         try:
-            cache_key = get_cache_key("https://graphql.bitquery.io", None, headers, {"query": query})
-            cached = api_cache.get(cache_key)
-            if cached:
-                bitquery_data = cached
-            else:
+            bitquery_data = None
+            auth_failures = []
+
+            for headers in header_candidates:
+                cache_key = get_cache_key("https://graphql.bitquery.io", None, headers, {"query": query})
+                cached = api_cache.get(cache_key)
+                if cached:
+                    bitquery_data = cached
+                    break
+
                 response = self.session.post(
                     "https://graphql.bitquery.io",
                     json={"query": query},
@@ -1198,32 +1206,32 @@ class DeFiRiskAssessor:
                 if response.status_code == 200:
                     bitquery_data = response.json()
                     api_cache.set(cache_key, bitquery_data)
-                elif response.status_code == 401:
-                    msg = f"BitQuery API error 401 Unauthorized for {token_address} on {chain}. Disabling BitQuery for this run. Please check your API key."
-                    print(msg)
-                    logging.error(msg)
-                    self.bitquery_available = False
-                    return {
-                        "transfers": {"count": 0, "amount": 0},
-                        "transactions": {"count": 0, "amount": 0}
-                    }
-                else:
-                    bitquery_data = None
+                    break
+
+                if response.status_code in (401, 403):
+                    auth_failures.append(response.status_code)
+                    continue
+
+                bitquery_data = None
+                break
+
+            if bitquery_data is None and auth_failures:
+                status_codes = ", ".join(str(code) for code in sorted(set(auth_failures)))
+                msg = (
+                    f"BitQuery API auth error ({status_codes}) for {token_address} on {chain}. "
+                    "Disabling BitQuery for this run. Please check your API key."
+                )
+                print(msg)
+                logging.error(msg)
+                self.bitquery_available = False
+                return empty_payload
+
             if bitquery_data:
-                return bitquery_data.get('data', {}).get(network_map[chain], {
-                    "transfers": {"count": 0, "amount": 0},
-                    "transactions": {"count": 0, "amount": 0}
-                })
-            return {
-                "transfers": {"count": 0, "amount": 0},
-                "transactions": {"count": 0, "amount": 0}
-            }
+                return bitquery_data.get('data', {}).get(network_map[chain], empty_payload)
+            return empty_payload
         except Exception as e:
             print(f"[fetch_bitquery_data] Error for {token_address} on {chain}: {e}")
-            return {
-                "transfers": {"count": 0, "amount": 0},
-                "transactions": {"count": 0, "amount": 0}
-            }
+            return empty_payload
     
     def fetch_market_data(self, token_address, chain):
         """Fetch market data from CoinGecko and CoinMarketCap APIs (with contract mapping for CMC)
