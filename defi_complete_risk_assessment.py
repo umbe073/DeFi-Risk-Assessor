@@ -691,7 +691,7 @@ class DeFiRiskAssessor:
                 "coin_id": "ethereum",
                 "dex": "uniswap",
                 "min_liquidity": 5000000,
-                "token_info_action": "tokeninfo",
+                "token_info_action": "token",
                 "coingecko_platform": "ethereum"
             },
             "bsc": {
@@ -711,7 +711,7 @@ class DeFiRiskAssessor:
                 "coin_id": "ethereum",
                 "dex": "uniswap",
                 "min_liquidity": 5000000,
-                "token_info_action": "tokeninfo",
+                "token_info_action": "token",
                 "coingecko_platform": "ethereum"
             }
         }
@@ -1863,7 +1863,10 @@ class DeFiRiskAssessor:
             try:
                 print("Fetching enhanced data from new APIs...")
                 # Add new API data to risk_report
-                risk_report['enhanced_data'] = self.fetch_enhanced_data(token_address, chain)
+                enhanced_data = self.fetch_enhanced_data(token_address, chain)
+                risk_report['enhanced_data'] = enhanced_data
+                # Keep backward compatibility with scoring methods that read `enhanced`.
+                risk_report['enhanced'] = enhanced_data
             except Exception as e:
                 print(f"[assess_token] Warning: Error fetching enhanced data for {token_address} on {chain}: {e}")
             
@@ -1912,7 +1915,10 @@ class DeFiRiskAssessor:
             total_risk_score = 0
             for component, weight in self.WEIGHTS.items():
                 total_risk_score += component_scores[component] * weight * 10  # Scale up the scores
-            for flag in risk_report['onchain']['red_flags']:
+            # Deduplicate while preserving order to avoid double-counting risk boosts.
+            unique_red_flags = list(dict.fromkeys(risk_report['onchain'].get('red_flags', [])))
+            risk_report['onchain']['red_flags'] = unique_red_flags
+            for flag in unique_red_flags:
                 boost = next(
                     (f['risk_boost'] for f in self.RED_FLAGS if f['check'] == flag), 
                     0
