@@ -16,32 +16,3 @@ AML / Compliance analysts who need to interpret scores and understand why a toke
 Quant and DeFi researchers who want to audit or extend scoring logic.
 Exchange listing / risk teams who need repeatable onboarding criteria.
 Engineers integrating the suite into dashboards, monitoring pipelines or case‑management tools.
-
-## GitHub auto-PR workflow setup
-
-The `Auto Open PR From Cursor Branches` workflow can create pull requests from `cursor/**` branches.
-If your repository blocks PR creation by `GITHUB_TOKEN`, configure one of the following:
-
-- Preferred workaround: add repository secret `CURSOR_PR_AUTOMATION_TOKEN` with a PAT that can open PRs in this repo.
-- Alternative: in repository settings, enable **Allow GitHub Actions to create and approve pull requests**.
-
-## Manual PR moderation from Slack reaction
-
-The `Process PR From Slack Reaction` workflow processes open pull requests from Slack reaction payloads:
-
-- `:white_check_mark:` (also accepts `✅`, `:heavy_check_mark:`, and `:check_mark:` aliases) approves and attempts to merge the PR.
-- `:no_entry:` (also accepts `⛔`, `🚫`, and `:no_entry_sign:` aliases) requests changes and closes the PR.
-
-- Accepted trigger events:
-  - `repository_dispatch` (event type can be chosen by your Slack bridge)
-  - `workflow_dispatch` for manual testing
-- Required payload fields:
-  - `pr_number` (or `pull_request.number`)
-  - `reaction` (or `emoji` / `reaction_name`)
-- Optional fields:
-  - `slack_user` and `slack_channel` for audit text in the approval review
-
-Default channel filter is `github_pull_requests`. If your Slack integration sends a different channel name or ID, update `ALLOWED_SLACK_CHANNELS` in `.github/workflows/approve-pr-from-slack-reaction.yml`.
-When `ALLOWED_SLACK_CHANNELS` is set, the dispatch payload must include a matching channel value.
-
-Merge strategy defaults to `squash` and can be changed with the `MERGE_METHOD` environment variable in the workflow (`merge`, `squash`, or `rebase`).
