@@ -1,0 +1,408 @@
+# Social Data Category - API Integration Guide
+## Comprehensive Guide for Alternative Data Sources
+
+### 📅 Version: v1.4
+### 🗓️ Date: August 2025
+### 🎯 Focus: Social Media & Community Data Integration
+
+---
+
+## 🎯 OVERVIEW
+
+This guide provides detailed instructions for obtaining API keys and integrating social data sources into the DeFi Risk Assessment Tool. These alternative data sources will enhance the assessment with community sentiment, engagement patterns, and reputation analysis.
+
+**IMPORTANT**: Some services require API keys, while others use web scraping (no API keys needed).
+
+---
+
+## 📊 SOCIAL DATA CATEGORY SOURCES
+
+### 1. Twitter (X) Integration ⚠️ REQUIRES API KEY
+**API Service**: Twitter API v2
+**Primary Use**: Sentiment analysis, engagement rates, follower growth, mention frequency
+**Compliance Value**: Real-time sentiment, community engagement, influencer mentions
+
+#### 🔑 API Key Requirements:
+- **Account Type**: Twitter Developer Account
+- **Access Level**: Academic Research (preferred) or Elevated Access
+- **Rate Limits**: 
+  - Academic: 500K tweets/month, 300 requests/15min
+  - Elevated: 2M tweets/month, 300 requests/15min
+- **Cost**: Free for Academic Research, $100/month for Elevated Access
+
+#### 📋 Setup Steps:
+1. **Create Twitter Developer Account**:
+   - Go to https://developer.twitter.com/
+   - Sign in with your Twitter account
+   - Apply for a developer account
+   - Fill out the application form (research/academic purpose)
+
+2. **Create App**:
+   - Navigate to "Projects & Apps" → "Create App"
+   - Choose "Academic Research" if eligible
+   - Fill out the app details and use case
+
+3. **Get API Keys**:
+   - API Key (Consumer Key)
+   - API Secret (Consumer Secret)
+   - Bearer Token (for v2 API)
+   - Access Token & Secret (for user authentication)
+
+4. **Environment Variables**:
+   ```bash
+   export TWITTER_API_KEY="your_api_key"
+   export TWITTER_API_SECRET="your_api_secret"
+   export TWITTER_BEARER_TOKEN="your_bearer_token"
+   ```
+
+#### 🔧 Integration Features:
+- **Sentiment Analysis**: Analyze tweet sentiment for tokens
+- **Engagement Metrics**: Track likes, retweets, replies
+- **Influencer Mentions**: Monitor crypto influencer discussions
+- **Trend Analysis**: Track mention frequency over time
+- **Community Size**: Monitor follower growth and engagement
+
+---
+
+### 2. Telegram Integration ⚠️ REQUIRES API KEY
+**API Service**: Telegram Bot API
+**Primary Use**: Channel member count, message frequency, bot activity
+**Compliance Value**: Community size, engagement patterns, suspicious bot activity
+
+#### 🔑 API Key Requirements:
+- **Account Type**: Telegram Bot Account
+- **Access Level**: Free tier available
+- **Rate Limits**: 30 messages/second, 20 requests/second
+- **Cost**: Free
+
+#### 📋 Setup Steps:
+1. **Create Telegram Bot**:
+   - Message @BotFather on Telegram
+   - Send `/newbot` command
+   - Choose bot name and username
+   - Receive bot token
+
+2. **Get Bot Token**:
+   - BotFather will provide a token like: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
+
+3. **Environment Variables**:
+   ```bash
+   export TELEGRAM_BOT_TOKEN="your_bot_token"
+   ```
+
+#### 🔧 Integration Features:
+- **Channel Analysis**: Monitor crypto project channels
+- **Member Count**: Track community growth
+- **Message Frequency**: Analyze engagement patterns
+- **Bot Detection**: Identify suspicious bot activity
+- **Community Sentiment**: Analyze message content and reactions
+
+---
+
+### 3. Discord Integration ⚠️ REQUIRES API KEY
+**API Service**: Discord Bot API
+**Primary Use**: Server member count, message frequency, bot activity
+**Compliance Value**: Community size, engagement patterns
+
+#### 🔑 API Key Requirements:
+- **Account Type**: Discord Bot Account
+- **Access Level**: Free tier available
+- **Rate Limits**: 50 requests/second
+- **Cost**: Free
+
+#### 📋 Setup Steps:
+1. **Create Discord Bot**:
+   - Go to https://discord.com/developers/applications
+   - Create new application
+   - Add bot to application
+   - Get bot token
+
+2. **Get Bot Token**:
+   - Bot token from Discord Developer Portal
+   - Server access permissions needed
+
+3. **Environment Variables**:
+   ```bash
+   export DISCORD_BOT_TOKEN="your_bot_token"
+   ```
+
+#### 🔧 Integration Features:
+- **Server Analysis**: Monitor crypto project servers
+- **Member Count**: Track community size
+- **Message Frequency**: Analyze engagement patterns
+- **Bot Detection**: Identify suspicious bot activity
+- **Community Sentiment**: Analyze message content
+
+---
+
+### 4. Reddit Integration ⚠️ REQUIRES API KEY
+**API Service**: Reddit API
+**Primary Use**: Subreddit mentions, sentiment analysis, post frequency
+**Compliance Value**: Community sentiment, discussion quality, red flag detection
+
+#### 🔑 API Key Requirements:
+- **Account Type**: Reddit Developer Account
+- **Access Level**: Free tier available
+- **Rate Limits**: 60 requests/minute
+- **Cost**: Free
+
+#### 📋 Setup Steps:
+1. **Create Reddit App**:
+   - Go to https://www.reddit.com/prefs/apps
+   - Click "Create App" or "Create Another App"
+   - Choose "script" as app type
+   - Fill out app details
+
+2. **Get API Credentials**:
+   - Client ID (under app name)
+   - Client Secret (if available)
+   - User Agent (your app name)
+
+3. **Environment Variables**:
+   ```bash
+   export REDDIT_CLIENT_ID="your_client_id"
+   export REDDIT_CLIENT_SECRET="your_client_secret"
+   export REDDIT_USER_AGENT="your_app_name/1.0"
+   ```
+
+#### 🔧 Integration Features:
+- **Subreddit Monitoring**: Track mentions in crypto subreddits
+- **Sentiment Analysis**: Analyze post and comment sentiment
+- **Discussion Quality**: Assess community discussion depth
+- **Red Flag Detection**: Identify suspicious posts or patterns
+- **Trend Analysis**: Monitor mention frequency over time
+
+---
+
+### 5. Bitcointalk Integration ✅ NO API KEY REQUIRED
+**API Service**: Web Scraping (No Official API)
+**Primary Use**: Thread mentions, sentiment, user reputation
+**Compliance Value**: Crypto community sentiment, historical reputation
+
+#### 🔑 API Key Requirements:
+- **Account Type**: No API key required
+- **Access Level**: Public forum access
+- **Rate Limits**: Respectful scraping (1 request/2-3 seconds)
+- **Cost**: Free
+
+#### 📋 Setup Steps:
+1. **No API Key Required**:
+   - Direct web scraping implementation
+   - Respectful rate limiting required
+   - User agent identification needed
+
+2. **Environment Variables**:
+   ```bash
+   export BITCOINTALK_USER_AGENT="your_app_name/1.0"
+   ```
+
+#### 🔧 Integration Features:
+- **Thread Monitoring**: Track token mentions in threads
+- **User Reputation**: Analyze poster reputation and history
+- **Sentiment Analysis**: Analyze post sentiment and tone
+- **Historical Data**: Access historical discussion data
+- **Community Trust**: Assess community trust indicators
+
+---
+
+### 6. Cointelegraph Integration ✅ NO API KEY REQUIRED
+**API Service**: RSS Feeds + Web Scraping
+**Primary Use**: Article mentions, sentiment, coverage frequency
+**Compliance Value**: Media coverage quality, professional reputation
+
+#### 🔑 API Key Requirements:
+- **Account Type**: No API key required
+- **Access Level**: Public RSS feeds
+- **Rate Limits**: Respectful scraping
+- **Cost**: Free
+
+#### 📋 Setup Steps:
+1. **RSS Feed Access**:
+   - Access public RSS feeds
+   - Implement respectful scraping
+   - No API key required
+
+2. **Environment Variables**:
+   ```bash
+   export COINTELEGRAPH_USER_AGENT="your_app_name/1.0"
+   ```
+
+#### 🔧 Integration Features:
+- **Article Monitoring**: Track token mentions in articles
+- **Coverage Analysis**: Assess media coverage quality
+- **Sentiment Analysis**: Analyze article sentiment
+- **Reputation Assessment**: Evaluate professional coverage
+- **Trend Monitoring**: Track coverage frequency over time
+
+---
+
+### 7. Medium Integration ⚠️ REQUIRES API KEY
+**API Service**: Medium API (Limited) + Web Scraping
+**Primary Use**: Article mentions, author reputation, engagement
+**Compliance Value**: Professional content, team transparency
+
+#### 🔑 API Key Requirements:
+- **Account Type**: Medium Developer Account
+- **Access Level**: Limited API access
+- **Rate Limits**: 100 requests/hour
+- **Cost**: Free
+
+#### 📋 Setup Steps:
+1. **Create Medium App**:
+   - Go to https://medium.com/developers
+   - Create a new integration
+   - Get integration token
+
+2. **Get API Token**:
+   - Integration token for API access
+   - Limited to your own publications
+
+3. **Environment Variables**:
+   ```bash
+   export MEDIUM_INTEGRATION_TOKEN="your_integration_token"
+   ```
+
+#### 🔧 Integration Features:
+- **Article Analysis**: Monitor token mentions in articles
+- **Author Reputation**: Assess author credibility and history
+- **Engagement Metrics**: Track article engagement
+- **Professional Content**: Evaluate content quality
+- **Team Transparency**: Assess team communication
+
+---
+
+## 🔧 IMPLEMENTATION PRIORITY
+
+### Phase 1: Easy Integration (Recommended Start) - NO API KEYS REQUIRED
+1. **Bitcointalk** - Web scraping, no API key needed
+2. **Cointelegraph** - RSS feeds, no API key needed
+
+### Phase 2: Free API Integration
+3. **Discord** - Free bot API, good engagement metrics
+4. **Telegram** - Free bot API, community size tracking
+5. **Reddit** - Free API, good community data
+
+### Phase 3: Advanced Integration
+6. **Medium** - Limited API, professional content
+7. **Twitter (X)** - Academic access required, comprehensive data
+
+---
+
+## 📊 DATA INTEGRATION FRAMEWORK
+
+### Social Data Categories:
+1. **Community Size**: Follower counts, member counts
+2. **Engagement Metrics**: Likes, retweets, replies, reactions
+3. **Sentiment Analysis**: Positive/negative sentiment scoring
+4. **Activity Patterns**: Post frequency, message frequency
+5. **Reputation Indicators**: User reputation, author credibility
+6. **Red Flag Detection**: Suspicious patterns, bot activity
+
+### Integration Points:
+- **Risk Scoring**: Enhance existing scoring functions
+- **Compliance Assessment**: Add social compliance indicators
+- **Reputation Analysis**: Community trust assessment
+- **Trend Monitoring**: Real-time sentiment tracking
+
+---
+
+## 🛡️ SECURITY & COMPLIANCE
+
+### Rate Limiting:
+- Implement respectful rate limiting for all APIs
+- Add exponential backoff for failed requests
+- Monitor API usage to avoid limits
+
+### Data Privacy:
+- Store only aggregated metrics, not personal data
+- Implement data retention policies
+- Ensure GDPR compliance for EU users
+
+### Error Handling:
+- Graceful degradation when APIs are unavailable
+- Comprehensive error logging
+- Fallback mechanisms for data gaps
+
+---
+
+## 📈 METRICS & SCORING
+
+### Social Data Scoring Framework:
+- **Community Size**: 0-10 scale based on follower/member counts
+- **Engagement Rate**: 0-10 scale based on activity patterns
+- **Sentiment Score**: -5 to +5 scale based on sentiment analysis
+- **Reputation Score**: 0-10 scale based on community trust
+- **Red Flag Score**: 0-10 scale based on suspicious activity
+
+### Integration with Existing Scoring:
+- **Industry Impact**: Add social reach indicators
+- **Global Reach**: Include social media presence
+- **Marketing Demand**: Add social engagement metrics
+- **Compliance Data**: Include social compliance indicators
+
+---
+
+## 🔮 FUTURE ENHANCEMENTS
+
+### Planned Features:
+1. **Real-time Monitoring**: Live sentiment tracking
+2. **Influencer Analysis**: Crypto influencer mention tracking
+3. **Trend Prediction**: Sentiment-based trend analysis
+4. **Community Health**: Overall community health scoring
+5. **Cross-platform Analysis**: Correlate data across platforms
+
+### Advanced Analytics:
+1. **Sentiment Correlation**: Link sentiment to price movements
+2. **Community Growth**: Track community expansion patterns
+3. **Engagement Quality**: Assess engagement authenticity
+4. **Reputation Scoring**: Community trust assessment
+5. **Risk Indicators**: Social media red flag detection
+
+---
+
+## 📝 IMPLEMENTATION NOTES
+
+### Technical Considerations:
+- **API Reliability**: Implement robust error handling
+- **Data Consistency**: Normalize data across platforms
+- **Performance**: Optimize for real-time processing
+- **Scalability**: Design for multiple data sources
+
+### Compliance Considerations:
+- **Data Privacy**: Ensure user privacy protection
+- **Rate Limiting**: Respect API usage limits
+- **Terms of Service**: Comply with platform terms
+- **Data Retention**: Implement appropriate retention policies
+
+---
+
+## 🚀 QUICK START GUIDE
+
+### For Immediate Testing (No API Keys Required):
+1. **Bitcointalk**: Works immediately with web scraping
+2. **Cointelegraph**: Works immediately with RSS feeds
+
+### For Enhanced Features (API Keys Required):
+1. **Discord**: Create bot at https://discord.com/developers/applications
+2. **Telegram**: Message @BotFather to create bot
+3. **Reddit**: Create app at https://www.reddit.com/prefs/apps
+4. **Twitter**: Apply for developer account at https://developer.twitter.com/
+
+### Environment Setup:
+```bash
+# Required for web scraping (no API keys needed)
+pip install beautifulsoup4 feedparser
+
+# Optional for enhanced features (API keys required)
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+export DISCORD_BOT_TOKEN="your_bot_token"
+export REDDIT_CLIENT_ID="your_client_id"
+export REDDIT_CLIENT_SECRET="your_client_secret"
+export TWITTER_API_KEY="your_api_key"
+export TWITTER_API_SECRET="your_api_secret"
+export TWITTER_BEARER_TOKEN="your_bearer_token"
+```
+
+---
+
+*This guide provides comprehensive instructions for integrating social data sources into the DeFi Risk Assessment Tool, enhancing the assessment with community sentiment, engagement patterns, and reputation analysis.* 

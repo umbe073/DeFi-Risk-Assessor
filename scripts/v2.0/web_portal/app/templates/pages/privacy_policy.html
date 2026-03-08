@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block">
+  <h1>Privacy Policy</h1>
+  <p><strong>Effective date:</strong> March 1, 2026</p>
+  <p>
+    This Privacy Policy describes how Hodler Suite collects, uses, stores, and protects personal data and technical data processed through
+    the platform, including website access, account management, support tickets, and billing-related workflows.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>1. Data Controller Context</h2>
+  <p>
+    Hodler Suite acts as the service operator for platform accounts and core operational records. Depending on implementation and enterprise agreements,
+    customers may act as independent controllers for data they submit through the Service.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>2. Data Categories We Process</h2>
+  <ul class="portal-list">
+    <li><strong>Account data:</strong> email address, user ID, role, authentication metadata, security reset flows.</li>
+    <li><strong>Security data:</strong> password hashes, 2FA/TOTP metadata, verification code events, anti-abuse/rate-limit signals.</li>
+    <li><strong>Support data:</strong> ticket subject/body, status transitions, conversation history, operational notifications.</li>
+    <li><strong>Billing data:</strong> plan identifiers, checkout sessions, order references, payment-state callbacks, subscription state.</li>
+    <li><strong>Technical telemetry:</strong> access logs, service status samples, latency/error metrics used for reliability and security operations.</li>
+  </ul>
+</section>
+
+<section class="panel-block">
+  <h2>3. Purpose of Processing</h2>
+  <ul class="portal-list">
+    <li>Provide account access, authentication, and role-based authorization.</li>
+    <li>Operate support and communication workflows.</li>
+    <li>Process subscription lifecycle events and payment-state reconciliation.</li>
+    <li>Maintain platform security, fraud prevention, abuse mitigation, and incident response.</li>
+    <li>Improve reliability, performance, and operational observability.</li>
+  </ul>
+</section>
+
+<section class="panel-block">
+  <h2>3A. Automated Processing Notice</h2>
+  <p>
+    Risk scores, anomaly tags, and red-flag indicators are generated through automated analytics. These outputs support operational
+    decisioning but are not fully autonomous legal determinations. Human review is recommended for material financial/compliance decisions.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>4. Legal Bases (General)</h2>
+  <ul class="portal-list">
+    <li><strong>Contractual necessity:</strong> account and subscription operations.</li>
+    <li><strong>Legitimate interests:</strong> service security, fraud prevention, diagnostics, and reliability controls.</li>
+    <li><strong>Compliance obligations:</strong> where legally required for records, law enforcement cooperation, or regulatory compliance.</li>
+    <li><strong>Consent:</strong> where specific optional processing requires it under applicable law.</li>
+  </ul>
+</section>
+
+<section class="panel-block">
+  <h2>5. Data Sources</h2>
+  <p>Data may be collected directly from users and indirectly via integrated processors/providers (for example payment, email, anti-bot, and external API services).</p>
+</section>
+
+<section class="panel-block">
+  <h2>6. Recipients and Processors</h2>
+  <p>
+    We may share data with vetted processors strictly for service delivery (such as payment gateways, email delivery/receiving providers, infrastructure providers,
+    and traffic protection services). We do not sell personal data.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>7. International Transfers</h2>
+  <p>
+    Depending on provider regions and customer location, data may be processed in multiple jurisdictions. Where required, we apply contractual and
+    technical safeguards appropriate to transfer risk.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>8. Retention</h2>
+  <ul class="portal-list">
+    <li>Account and subscription records are retained while accounts are active and for a reasonable period thereafter for legal/security continuity.</li>
+    <li>Support conversations and operational event logs are retained for troubleshooting, accountability, and service improvement.</li>
+    <li>Security and anti-abuse telemetry retention is scoped to operational necessity and legal obligations.</li>
+  </ul>
+</section>
+
+<section class="panel-block">
+  <h2>8A. Data Minimization and Redaction</h2>
+  <p>
+    Public documentation, external knowledge-base materials, and non-production artifacts are processed through redaction controls to remove
+    secret tokens, sensitive infrastructure paths, and private-origin network details before publication.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>9. Security Controls</h2>
+  <ul class="portal-list">
+    <li>Password hashing, session controls, role-based access boundaries, and optional 2FA.</li>
+    <li>CSRF protections, security headers, reverse-proxy controls, and anti-bot challenge flow.</li>
+    <li>Operational monitoring, service-status probes, and reconciliation workflows for critical billing/support pathways.</li>
+  </ul>
+  <p>
+    No system can guarantee absolute security; however, we implement layered controls designed for practical risk reduction and rapid incident response.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>10. User Rights</h2>
+  <p>
+    Subject to applicable law, users may request access, correction, deletion, restriction, portability, or objection regarding personal data processing.
+    We may require identity verification and may decline requests where legal exceptions apply.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>10A. Contact for Privacy Requests</h2>
+  <p>
+    For access/correction/deletion requests, submit a support ticket from the platform Help Center and include your account email plus User ID
+    so requests can be authenticated and processed securely.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>11. Cookies and Similar Technologies</h2>
+  <p>
+    The platform uses essential session/security mechanisms and may use technical controls (including challenge verification) to prevent abuse
+    and preserve integrity. Optional analytics/tracking should be configured in accordance with your jurisdictional requirements.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>12. Children’s Data</h2>
+  <p>
+    The Service is not directed to children. If you believe a child has provided personal data in violation of applicable law, contact support for
+    review and remediation.
+  </p>
+</section>
+
+<section class="panel-block">
+  <h2>13. Policy Updates</h2>
+  <p>
+    We may update this Privacy Policy when required by legal, operational, or product changes. Updated versions are effective upon publication,
+    with an updated effective date.
+  </p>
+  <p class="inline-note">
+    For usage rules, disclaimers, and platform obligations, see
+    <a href="{{ url_for('pages.terms_of_use_page') }}">Terms of Use</a>.
+  </p>
+</section>
+{% endblock %}

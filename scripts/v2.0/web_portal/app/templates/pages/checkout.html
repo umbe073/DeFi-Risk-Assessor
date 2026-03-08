@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Checkout - Hodler Suite{% endblock %}
+{% block content %}
+<div
+  id="checkout-root"
+  class="checkout-shell"
+  data-plans='{{ checkout_plans | tojson | forceescape }}'
+  data-default-plan="{{ default_plan }}"
+  data-nowpayments-enabled="{{ 'true' if nowpayments_enabled else 'false' }}"
+  data-csrf-token="{{ csrf_token() }}"
+>
+  <section class="checkout-hero">
+    <div class="checkout-hero-copy">
+      <p class="checkout-kicker">Subscription Control Center</p>
+      <h1>Choose Your Hodler Suite Plan</h1>
+      <p>
+        Transparent pricing, on-chain payment with NOWPayments, and enterprise-grade custom plans when your
+        operation requires tailored limits.
+      </p>
+      <div class="checkout-attestation">
+        <a href="https://nowpayments.io/" target="_blank" rel="noopener noreferrer" class="checkout-attestation-link" aria-label="Open NOWPayments website">
+          <img
+            src="{{ url_for('static', filename='img/nowpayments-scheme-logo.png') }}"
+            alt="NOWPayments"
+            class="nowpayments-logo"
+          >
+        </a>
+        <span>
+          Powered by
+          <a href="https://nowpayments.io/" target="_blank" rel="noopener noreferrer">NOWPayments</a>
+        </span>
+      </div>
+      {% if checkout_state == "success" %}
+      <p class="inline-note">Payment provider returned success. Your subscription will activate once webhook confirmation is processed.</p>
+      {% elif checkout_state == "cancel" %}
+      <p class="inline-note">Checkout canceled. You can retry anytime.</p>
+      {% endif %}
+    </div>
+    <div class="checkout-subscription-snapshot">
+      <h2>Current Access</h2>
+      {% if subscription %}
+      <p><strong>Plan:</strong> {{ subscription.plan_name }} ({{ subscription.plan_id }})</p>
+      <p><strong>Status:</strong> {{ subscription.status }}</p>
+      <p><strong>Scans/day:</strong> {{ subscription.scans_per_day }}</p>
+      <p><strong>Valid until:</strong> {{ subscription.expires_at_utc or 'N/A' }}</p>
+      {% else %}
+      <p>No active subscription yet. Start with Free or go directly to a paid plan.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="checkout-grid">
+    <div class="plan-selector-card">
+      <h2>Plan Selection</h2>
+      <div class="plan-selector-list" id="plan-selector-list">
+        {% for plan in checkout_plans %}
+        <button
+          class="plan-chip{% if plan.id == default_plan %} is-active{% endif %}"
+          type="button"
+          data-plan-id="{{ plan.id }}"
+        >
+          <span class="plan-chip-title">{{ plan.button_label or plan.name }}</span>
+          <span class="plan-chip-price">
+            {% if plan.requires_enterprise_code %}
+            Custom
+            {% elif plan.requires_payment %}
+            {{ "%.2f"|format(plan.amount_value) }} {{ plan.price_currency }}
+            {% else %}
+            Trial
+            {% endif %}
+          </span>
+        </button>
+        {% endfor %}
+      </div>
+
+      {% if show_plan_details %}
+      <div class="selected-plan-box" id="selected-plan-box">
+        <p class="inline-note">Select a plan to view details.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <form id="checkout-form" class="checkout-form-card">
+      <h2>Payment</h2>
+      {% if not nowpayments_enabled %}
+      <p class="inline-note">Paid checkout is temporarily disabled. Free plan can still be activated.</p>
+      {% endif %}
+
+      <input id="plan-id" name="plan_id" type="hidden" value="{{ default_plan }}">
+
+      <label for="amount-value">Amount</label>
+      <input id="amount-value" type="text" readonly>
+
+      <label for="amount-currency">Price Currency</label>
+      <input id="amount-currency" type="text" readonly>
+
+      <label for="pay-currency">Currency (crypto)</label>
+      <select id="pay-currency" required>
+        {% for option in pay_currency_options %}
+        <option value="{{ option.code }}">{{ option.label }}</option>
+        {% endfor %}
+      </select>
+      {% if pay_currency_notice %}
+      <p class="inline-note">{{ pay_currency_notice }}</p>
+      {% endif %}
+
+      <div id="enterprise-code-wrap" class="enterprise-code-wrap hidden">
+        <label for="enterprise-code">Enterprise Code</label>
+        <input id="enterprise-code" type="text" placeholder="HS-ENT-XXXXXXXX" autocomplete="off">
+        <p class="inline-note">
+          Enterprise code is provided by support after commercial agreement.
+        </p>
+      </div>
+
+      <div class="fees-note">
+        <strong>Fee policy:</strong> plan prices shown below are service fees. Blockchain/network fees
+        and exchange spread are handled by payment rails and may vary by asset.
+      </div>
+
+      <button id="checkout-submit" type="submit">Continue To Secure Checkout</button>
+    </form>
+  </section>
+
+  {% if show_enterprise_controls %}
+  <section class="panel-block">
+    <h2>Enterprise Offer Codes</h2>
+    <p class="inline-note">Master/Admin only. Generate one-time enterprise checkout codes for commercial agreements.</p>
+    <form method="post" action="{{ url_for('pages.support_tickets_create_enterprise_code') }}" class="stacked-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ url_for('pages.checkout_page') }}">
+      <div class="form-grid-two">
+        <div>
+          <label for="ent-amount">Amount (EUR)</label>
+          <input id="ent-amount" name="amount_value" type="number" min="1" step="0.01" value="999.99" required>
+        </div>
+        <div>
+          <label for="ent-scans">Daily scans</label>
+          <input id="ent-scans" name="scans_per_day" type="number" min="1" step="1" value="100" required>
+        </div>
+        <div>
+          <label for="ent-duration">Plan duration (days)</label>
+          <input id="ent-duration" name="duration_days" type="number" min="1" step="1" value="30" required>
+        </div>
+        <div>
+          <label for="ent-valid">Code validity (days)</label>
+          <input id="ent-valid" name="valid_days" type="number" min="1" step="1" value="30" required>
+        </div>
+      </div>
+      <label for="ent-note">Internal note (optional)</label>
+      <input id="ent-note" name="note" type="text" maxlength="200" placeholder="Commercial agreement / reference">
+      <button type="submit">Generate Enterprise Code</button>
+    </form>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Status</th>
+            <th>Amount</th>
+            <th>Scans/day</th>
+            <th>Duration</th>
+            <th>Valid until</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for code in enterprise_codes %}
+          <tr>
+            <td><code>{{ code.code }}</code></td>
+            <td>{{ code.status }}</td>
+            <td>{{ "%.2f"|format(code.amount_value) }} {{ code.price_currency }}</td>
+            <td>{{ code.scans_per_day }}</td>
+            <td>{{ code.duration_days }}d</td>
+            <td>{{ code.valid_until_utc }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6">No active enterprise codes.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel-block">
+    <h2>Manual Free Trial Grant</h2>
+    <p class="inline-note">Master/Admin only. Grant a fresh 30-day Free plan to any user by 8-digit User ID.</p>
+    <form method="post" action="{{ url_for('pages.checkout_grant_free_trial') }}" class="stacked-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="grant-target-uid">Target User ID</label>
+      <input id="grant-target-uid" name="target_uid" type="text" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" placeholder="00000000" required>
+      <button type="submit">Grant 30-Day Free Trial</button>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if show_plan_details %}
+  <section class="plan-showcase">
+    <h2>Compare Plans</h2>
+    <div class="plan-showcase-grid">
+      {% for plan in checkout_plans %}
+      <article class="plan-showcase-card">
+        <header>
+          <h3>{{ plan.name }}</h3>
+          <p class="plan-showcase-price">
+            {% if plan.requires_enterprise_code %}
+            Custom agreement
+            {% elif plan.requires_payment %}
+            {{ "%.2f"|format(plan.amount_value) }} {{ plan.price_currency }} / {{ 'month' if plan.duration_days == 30 else (plan.duration_days ~ ' days') }}
+            {% else %}
+            Free for {{ plan.duration_days }} days
+          {% endif %}
+          </p>
+        </header>
+        <p class="plan-showcase-desc">{{ plan.description }}</p>
+        <p class="plan-showcase-meta"><strong>Daily scans:</strong> {{ plan.scans_per_day if plan.scans_per_day > 0 else 'Custom' }}</p>
+        <ul>
+          {% for feature in plan.features %}
+          <li>{{ feature }}</li>
+          {% endfor %}
+        </ul>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <pre id="checkout-result" class="log-box checkout-log">No checkout session created yet.</pre>
+</div>
+<script src="{{ url_for('static', filename='js/checkout_page.js', v='20260304a') }}"></script>
+{% endblock %}

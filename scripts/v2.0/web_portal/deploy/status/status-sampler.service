@@ -1,0 +1,11 @@
+[Unit]
+Description=Hodler Suite Services Status sampler
+After=network-online.target hodler-web-portal.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hodler_status_sampler.sh
+User=root
+Group=root
+Nice=10

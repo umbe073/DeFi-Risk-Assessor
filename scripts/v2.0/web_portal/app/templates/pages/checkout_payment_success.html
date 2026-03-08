@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Payment Completed - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block payment-state-card payment-state-success">
+  <h1>Your payment has been completed!</h1>
+  <p>Your subscription payment was confirmed successfully.</p>
+</section>
+
+<section class="panel-block">
+  <h2>Payment Receipt</h2>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><th>Receipt ID</th><td><code>{{ payment_details.receipt_id or '-' }}</code></td></tr>
+        <tr><th>Order ID</th><td><code>{{ order_id or '-' }}</code></td></tr>
+        <tr><th>Operation ID</th><td><code>{{ payment_details.operation_id or '-' }}</code></td></tr>
+        <tr><th>Transaction ID</th><td><code>{{ payment_details.transaction_id or '-' }}</code></td></tr>
+        <tr><th>Receiving Wallet</th><td><code>{{ payment_details.receiving_wallet or '-' }}</code></td></tr>
+        <tr><th>Date & Time (UTC)</th><td>{{ payment_details.paid_at_utc or '-' }}</td></tr>
+        <tr><th>Status</th><td>{{ checkout.status if checkout else 'completed' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if subscription %}
+<section class="panel-block">
+  <h2>Subscription Activated</h2>
+  <p><strong>Plan:</strong> {{ subscription.plan_name }} ({{ subscription.plan_id }})</p>
+  <p><strong>Status:</strong> {{ subscription.status }}</p>
+  <p><strong>Scans/day:</strong> {{ subscription.scans_per_day }}</p>
+  <p><strong>Valid until:</strong> {{ subscription.expires_at_utc or 'N/A' }}</p>
+</section>
+{% endif %}
+
+<section class="panel-block">
+  <a class="link-button" href="{{ url_for('pages.checkout_page') }}">Return to Checkout</a>
+</section>
+{% endblock %}

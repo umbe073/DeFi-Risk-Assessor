@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Help Center - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block narrow">
+  <h1>Help Center</h1>
+  <p>Open a ticket and receive an automated confirmation by email.</p>
+  {% set selected_category = (form_values.category if form_values else "general") %}
+  <form
+    id="ticket-form"
+    class="stacked-form"
+    method="post"
+    action="{{ url_for('pages.help_center') }}"
+    enctype="multipart/form-data"
+  >
+    <label>Your email</label>
+    <input
+      id="email"
+      name="email"
+      type="email"
+      maxlength="320"
+      data-locked-email="{{ (form_values.email if form_values else '') if email_locked else '' }}"
+      value="{{ form_values.email if form_values else '' }}"
+      {% if email_locked %}readonly{% endif %}
+      required
+    >
+    {% if email_locked %}
+    <p class="inline-note">Signed-in users can submit tickets only with their account email.</p>
+    {% endif %}
+    <label>Category</label>
+    <select id="category" name="category" required>
+      <option value="general" {% if selected_category == "general" %}selected{% endif %}>General</option>
+      <option value="bug_report" {% if selected_category == "bug_report" %}selected{% endif %}>Bug Report</option>
+      <option value="account_issue" {% if selected_category == "account_issue" %}selected{% endif %}>Account Issue</option>
+      <option value="payment_issue" {% if selected_category == "payment_issue" %}selected{% endif %}>Payment Issue</option>
+      <option value="business_relationship" {% if selected_category == "business_relationship" %}selected{% endif %}>Business Relationship</option>
+      <option value="legal" {% if selected_category == "legal" %}selected{% endif %}>Legal</option>
+    </select>
+    <label>Subject</label>
+    <input id="subject" name="subject" type="text" maxlength="24" value="{{ form_values.subject if form_values else '' }}" required>
+    <div id="bug-report-fields" {% if selected_category != "bug_report" %}hidden{% endif %}>
+      <label for="bug-surface">Is the bug on the website or on the app?</label>
+      <select id="bug-surface" name="bug_surface" {% if selected_category == "bug_report" %}required{% endif %}>
+        <option value="">Select one</option>
+        <option value="website" {% if form_values and form_values.bug_surface == "website" %}selected{% endif %}>Website</option>
+        <option value="app" {% if form_values and form_values.bug_surface == "app" %}selected{% endif %}>App</option>
+      </select>
+
+      <label for="bug-severity">Severity of the bug</label>
+      <select id="bug-severity" name="bug_severity" {% if selected_category == "bug_report" %}required{% endif %}>
+        <option value="">Select one</option>
+        <option value="low" {% if form_values and form_values.bug_severity == "low" %}selected{% endif %}>Low</option>
+        <option value="medium" {% if form_values and form_values.bug_severity == "medium" %}selected{% endif %}>Medium</option>
+        <option value="high" {% if form_values and form_values.bug_severity == "high" %}selected{% endif %}>High</option>
+        <option value="very_high" {% if form_values and form_values.bug_severity == "very_high" %}selected{% endif %}>Very High</option>
+      </select>
+
+      <label for="bug-reproducible">Could you reproduce the bug?</label>
+      <select id="bug-reproducible" name="bug_reproducible" {% if selected_category == "bug_report" %}required{% endif %}>
+        <option value="">Select one</option>
+        <option value="yes" {% if form_values and form_values.bug_reproducible == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if form_values and form_values.bug_reproducible == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+    <div id="payment-issue-fields" {% if selected_category != "payment_issue" %}hidden{% endif %}>
+      <label for="payment-txid">Transaction ID (TxID)</label>
+      <input
+        id="payment-txid"
+        name="payment_txid"
+        type="text"
+        maxlength="180"
+        value="{{ form_values.payment_txid if form_values else '' }}"
+        {% if selected_category == "payment_issue" %}required{% endif %}
+      >
+
+      <label for="payment-chain">Blockchain</label>
+      <select id="payment-chain" name="payment_chain" {% if selected_category == "payment_issue" %}required{% endif %}>
+        <option value="">Select one</option>
+        <option value="ethereum" {% if form_values and form_values.payment_chain == "ethereum" %}selected{% endif %}>Ethereum</option>
+        <option value="bsc" {% if form_values and form_values.payment_chain == "bsc" %}selected{% endif %}>BNB Smart Chain</option>
+        <option value="tron" {% if form_values and form_values.payment_chain == "tron" %}selected{% endif %}>Tron</option>
+        <option value="solana" {% if form_values and form_values.payment_chain == "solana" %}selected{% endif %}>Solana</option>
+        <option value="bitcoin" {% if form_values and form_values.payment_chain == "bitcoin" %}selected{% endif %}>Bitcoin</option>
+        <option value="polygon" {% if form_values and form_values.payment_chain == "polygon" %}selected{% endif %}>Polygon</option>
+        <option value="arbitrum" {% if form_values and form_values.payment_chain == "arbitrum" %}selected{% endif %}>Arbitrum</option>
+        <option value="optimism" {% if form_values and form_values.payment_chain == "optimism" %}selected{% endif %}>Optimism</option>
+        <option value="avalanche" {% if form_values and form_values.payment_chain == "avalanche" %}selected{% endif %}>Avalanche</option>
+        <option value="base" {% if form_values and form_values.payment_chain == "base" %}selected{% endif %}>Base</option>
+        <option value="other" {% if form_values and form_values.payment_chain == "other" %}selected{% endif %}>Other</option>
+      </select>
+    </div>
+    <label id="message-label" for="message">Message</label>
+    <textarea id="message" name="message" rows="6" maxlength="2000" required>{{ form_values.message if form_values else '' }}</textarea>
+    <label for="attachments">Attachments (all categories)</label>
+    <input
+      id="attachments"
+      name="attachments"
+      type="file"
+      accept=".pdf,.png,.jpg,.jpeg,.heic,.mp4,.mov,.wmv"
+      multiple
+    >
+    <p class="inline-note">Accepted formats: PDF, PNG, JPG, JPEG, HEIC, MP4, MOV, WMV. Files are security-scanned before ticket submission.</p>
+    <button type="submit">Create ticket</button>
+  </form>
+  <p id="ticket-result" class="inline-note">No ticket submitted yet.</p>
+  <section class="ticket-history-block" id="ticket-history-block">
+    <h2>Your submitted tickets</h2>
+    {% if email_locked %}
+    <p id="ticket-history-empty" class="inline-note" {% if submitted_tickets %}hidden{% endif %}>
+      No tickets submitted from this account yet.
+    </p>
+    <div class="table-wrap ticket-history-wrap" id="ticket-history-wrap" {% if not submitted_tickets %}hidden{% endif %}>
+      <table id="ticket-history-table">
+        <thead>
+          <tr>
+            <th>Ticket ID</th>
+            <th>Created (UTC)</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Subject</th>
+            <th>Details</th>
+            <th>Attachments</th>
+          </tr>
+        </thead>
+        <tbody id="ticket-history-body">
+          {% for ticket in submitted_tickets %}
+          <tr>
+            <td><code>{{ ticket.ticket_ref }}</code></td>
+            <td>{{ ticket.created_at_utc }}</td>
+            <td>{{ ticket.category }}</td>
+            <td>{{ ticket.status }}</td>
+            <td>{{ ticket.subject }}</td>
+            <td>
+              {% if ticket.detail_rows %}
+              <ul class="ticket-detail-list">
+                {% for item in ticket.detail_rows %}
+                <li><strong>{{ item.label }}:</strong> {{ item.value }}</li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <span class="inline-note">-</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if ticket.attachments %}
+              <ul class="ticket-attachments-list">
+                {% for item in ticket.attachments %}
+                <li><a href="{{ item.download_url }}">{{ item.filename }}</a></li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <span class="inline-note">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="inline-note">Sign in to track your submitted tickets history.</p>
+    {% endif %}
+  </section>
+</section>
+<script src="{{ url_for('static', filename='js/help_center.js', v='20260307b') }}"></script>
+{% endblock %}

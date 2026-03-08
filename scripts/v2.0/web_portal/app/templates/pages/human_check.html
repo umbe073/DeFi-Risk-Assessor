@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Just a moment... - Hodler Suite</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon/favicon.ico', v='20260228a') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon/favicon.svg', v='20260228a') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon/favicon-32x32.png', v='20260228a') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon/apple-touch-icon.png', v='20260228a') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='site.css', v='20260228c') }}">
+  </head>
+  <body class="human-check-body">
+    <main class="human-check-shell">
+      <section class="human-check-panel">
+        <h1>hodler-suite.com</h1>
+        <h2>Performing security verification</h2>
+        <p>
+          This website uses a security service to protect against malicious bots.
+          This page is displayed while we verify you are not a bot.
+        </p>
+
+        {% if not turnstile_site_key %}
+        <p class="human-check-note">
+          Turnstile is not configured. Set <code>TURNSTILE_SITE_KEY</code> and <code>TURNSTILE_SECRET_KEY</code>.
+        </p>
+        {% else %}
+        <form method="post" class="human-check-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ next_target }}">
+          <div class="turnstile-wrap human-turnstile-wrap">
+            <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="dark"></div>
+          </div>
+          <button type="submit">Continue</button>
+        </form>
+        {% endif %}
+
+        {% if turnstile_error %}
+        <p class="human-check-error">Verification error code: {{ turnstile_error }}</p>
+        {% endif %}
+      </section>
+      <footer class="human-check-footer">
+        <span>Performance and Security by Cloudflare Turnstile</span>
+      </footer>
+    </main>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  </body>
+</html>

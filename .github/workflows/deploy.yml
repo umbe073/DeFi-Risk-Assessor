@@ -1,0 +1,96 @@
+name: Deploy to Production
+
+# Triggers when a PR is merged into main — or on a manual push to main.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:   # allows manual "re-deploy" trigger from the GitHub UI
+
+jobs:
+  deploy:
+    name: SSH deploy to Vultr
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Only run if this is not just a docs-only change (optional filter).
+    # Remove the paths-ignore block if you want every merge to trigger a deploy.
+    # paths-ignore:
+    #   - 'docs/**'
+    #   - '**.md'
+
+    steps:
+      # ── 1. Checkout (needed to diff / inspect, not strictly for deploy) ──────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up SSH ──────────────────────────────────────────────────────────
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Trust the server's host key (avoids interactive prompt)
+          ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT || 22 }} ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      # ── 3. Pull latest code on the server & restart services ──────────────────
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}        # e.g. /opt/hodler-suite
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -p "${DEPLOY_PORT:-22}" \
+              -o StrictHostKeyChecking=no \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              bash -s << 'ENDSSH'
+            set -euo pipefail
+
+            echo "==> Pulling latest code..."
+            cd "$DEPLOY_PATH"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> Installing/updating Python dependencies..."
+            pip install -q -r scripts/v2.0/web_portal/requirements.txt 2>/dev/null || true
+            pip install -q -r requirements.txt 2>/dev/null || true
+
+            echo "==> Restarting services..."
+            sudo systemctl restart hodler-webportal.service  || true
+            sudo systemctl restart hodler-script-api.service || true
+
+            echo "==> Verifying services are up..."
+            sleep 3
+            systemctl is-active --quiet hodler-webportal.service  && echo "  webportal  OK" || echo "  webportal  FAILED"
+            systemctl is-active --quiet hodler-script-api.service && echo "  script-api OK" || echo "  script-api FAILED"
+
+            echo "==> Deploy complete."
+          ENDSSH
+
+      # ── 4. Notify Slack on success ─────────────────────────────────────────────
+      - name: Notify Slack — success
+        if: success()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "✅ *Deploy succeeded* — `${{ github.repository }}` @ `${{ github.sha_short || github.sha }}` merged by *${{ github.actor }}*.\n<${{ github.event.compare }}|View diff>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEPLOY_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      # ── 5. Notify Slack on failure ─────────────────────────────────────────────
+      - name: Notify Slack — failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "🚨 *Deploy FAILED* — `${{ github.repository }}` @ `${{ github.sha }}` by *${{ github.actor }}*.\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEPLOY_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Sign In - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block narrow">
+  <h1>Sign In</h1>
+  <p>Access to dashboard, assessment workflows, checkout, and account settings is authenticated.</p>
+  <form method="post" class="stacked-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next_target }}">
+
+    <label>Email</label>
+    <input type="email" name="email" autocomplete="username" required>
+
+    <label>Password</label>
+    <input type="password" name="password" autocomplete="current-password" required>
+
+    <button type="submit">Sign In</button>
+  </form>
+  <p class="inline-note"><a href="{{ url_for('auth.password_reset_request') }}">Forgot your password?</a></p>
+  <p class="inline-note">New to Hodler Suite? <a href="{{ url_for('auth.signup') }}">Create an account</a>.</p>
+</section>
+{% endblock %}

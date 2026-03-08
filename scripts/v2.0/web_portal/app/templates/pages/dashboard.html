@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block">
+  <h1>Main Dashboard</h1>
+  <p>Control center for queued assessments, recent outcomes, and current execution status.</p>
+  <div class="stat-grid">
+    <div class="stat-card"><strong>Queued Jobs</strong><p>{{ risk_counts.queued }}</p></div>
+    <div class="stat-card"><strong>Running Jobs</strong><p>{{ risk_counts.running }}</p></div>
+    <div class="stat-card"><strong>Succeeded (24h)</strong><p>{{ risk_recent_success }}</p></div>
+    <div class="stat-card"><strong>Failed (24h)</strong><p>{{ risk_recent_failed }}</p></div>
+    <div class="stat-card"><strong>Success Rate (24h)</strong><p>{{ "%.1f"|format(risk_recent_success_rate) }}%</p></div>
+    <div class="stat-card">
+      <strong>Queue Pressure</strong>
+      <p>{{ risk_backlog_total }}</p>
+      <span class="status-badge {{ risk_backlog_class }}">{{ risk_backlog_label }}</span>
+    </div>
+  </div>
+  <div class="row-inline-actions">
+    <a href="{{ url_for('pages.live_assessment') }}">Open Live Assessment</a>
+    {% if focus_risk_job %}
+    <a href="{{ url_for('pages.live_assessment', job_id=focus_risk_job.job_id) }}">Open Focus Job</a>
+    {% endif %}
+  </div>
+  {% if focus_risk_job %}
+  <p class="inline-note">
+    Focus job:
+    <a href="{{ url_for('pages.live_assessment', job_id=focus_risk_job.job_id) }}">{{ focus_risk_job.job_id }}</a>
+    ({{ focus_risk_job.status }} / {{ focus_risk_job.stage }} / {{ focus_risk_job.progress }}%)
+  </p>
+  {% else %}
+  <p class="inline-note">No risk assessment jobs yet. Start one from <a href="{{ url_for('pages.live_assessment') }}">Live Assessment</a>.</p>
+  {% endif %}
+</section>
+
+{% if focus_risk_job %}
+<section class="panel-block">
+  <h2>Focus Job Signal Snapshot</h2>
+  <div class="status-meta-row">
+    <span><strong>Job:</strong> <a href="{{ url_for('pages.live_assessment', job_id=focus_risk_job.job_id) }}">{{ focus_risk_job.job_id }}</a></span>
+    <span><strong>Status:</strong> <span class="status-badge status-{{ focus_risk_job.status }}">{{ focus_risk_job.status }}</span></span>
+    <span><strong>Stage:</strong> <span class="status-badge status-unknown">{{ focus_risk_job.stage }}</span></span>
+    <span><strong>Progress:</strong> {{ focus_risk_job.progress }}%</span>
+  </div>
+  <div class="status-meta-row">
+    <span><strong>Risk Band:</strong> <span class="status-badge dashboard-risk-badge risk-{{ focus_risk_signal.risk_band }}">{{ focus_risk_signal.risk_band_label }}</span></span>
+    <span><strong>Risk Score:</strong> {{ focus_risk_signal.risk_score_label }}</span>
+    <span><strong>Confidence:</strong> {{ focus_risk_signal.confidence_label }}</span>
+    <span><strong>Model:</strong> {{ focus_risk_signal.model_label }}</span>
+  </div>
+  <div class="status-meta-row">
+    <span><strong>Chain:</strong> {{ focus_risk_signal.token_chain_label }}</span>
+    <span><strong>Token:</strong> <code>{{ focus_risk_signal.token_address_label }}</code></span>
+  </div>
+  {% if focus_risk_signal.top_signals %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Top Signal</th>
+          <th>Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for signal in focus_risk_signal.top_signals %}
+        <tr>
+          <td>{{ signal.name }}</td>
+          <td>{{ signal.score }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="inline-note">No detailed signal breakdown is available yet for this job.</p>
+  {% endif %}
+</section>
+
+<section class="panel-block">
+  <h2>Latest Job Trace</h2>
+  {% if focus_risk_events %}
+  <div class="dashboard-trace-list">
+    {% for event in focus_risk_events %}
+    <div class="dashboard-trace-item trace-{{ event.status }}">
+      <time class="dashboard-trace-time">{{ event.created_at_utc }}</time>
+      <span class="status-badge status-{{ event.status }}">{{ event.status }}</span>
+      <span class="status-badge status-unknown">{{ event.stage }}</span>
+      <span class="dashboard-trace-progress">{{ event.progress }}%</span>
+      <span class="dashboard-trace-message">{{ event.message }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="inline-note">No execution events yet for the focus job.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel-block">
+  <h2>Recent Risk Jobs</h2>
+  {% if recent_risk_jobs %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Job ID</th>
+          <th>Created (UTC)</th>
+          <th>Token</th>
+          <th>Mode</th>
+          <th>Status</th>
+          <th>Stage</th>
+          <th>Progress</th>
+          <th>Risk</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in recent_risk_jobs %}
+        <tr class="dashboard-job-row risk-{{ job.risk_band }} status-{{ job.status }}">
+          <td><a href="{{ url_for('pages.live_assessment', job_id=job.job_id) }}">{{ job.job_id }}</a></td>
+          <td>{{ job.created_at_utc }}</td>
+          <td><code>{{ job.token_address }}</code></td>
+          <td>{{ job.mode }}</td>
+          <td>{{ job.status }}</td>
+          <td>{{ job.stage }}</td>
+          <td>
+            <div class="dashboard-progress">
+              <span>{{ job.progress }}%</span>
+              <div class="dashboard-progress-track"><span style="width: {{ job.progress }}%;"></span></div>
+            </div>
+          </td>
+          <td><span class="status-badge dashboard-risk-badge risk-{{ job.risk_band }}">{{ job.risk_band_label }}</span></td>
+          <td>{{ job.confidence_label }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="inline-note">No jobs to display.</p>
+  {% endif %}
+</section>
+{% endblock %}

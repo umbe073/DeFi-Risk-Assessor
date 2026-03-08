@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Payment Failed - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block payment-state-card payment-state-failed">
+  <h1>Payment Failed</h1>
+  <p>
+    The payment could not be completed.
+    {% if order_id %}Order: <code>{{ order_id }}</code>.{% endif %}
+  </p>
+  <p>
+    Please click
+    <a href="{{ return_url }}"><strong>here</strong></a>
+    to return to the checkout page.
+  </p>
+</section>
+{% endblock %}

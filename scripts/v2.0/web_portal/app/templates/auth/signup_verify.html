@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Verify Email - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block narrow">
+  <h1>Verify Your Email</h1>
+  <p>To complete sign-up for <strong>{{ email }}</strong>, click the button below to send your confirmation code.</p>
+  <p class="inline-note">The code is 6 digits and expires in {{ expiry_minutes }} minutes.</p>
+
+  <form method="post" action="{{ url_for('auth.signup_send_code') }}" class="stacked-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">Send Confirmation Code</button>
+  </form>
+
+  <form method="post" action="{{ url_for('auth.signup_verify') }}" class="stacked-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Confirmation Code</label>
+    <input
+      type="text"
+      name="code"
+      inputmode="numeric"
+      pattern="[0-9]{6}"
+      maxlength="6"
+      placeholder="000000"
+      required
+    >
+    <button type="submit">Verify and Activate Account</button>
+  </form>
+</section>
+{% endblock %}

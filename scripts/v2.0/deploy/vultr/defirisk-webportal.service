@@ -1,0 +1,18 @@
+[Unit]
+Description=DeFi Risk Web Portal (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=defirisk
+Group=defirisk
+WorkingDirectory=/opt/defi-risk/app/scripts/v2.0/web_portal
+EnvironmentFile=/etc/defi-risk/web_portal.env
+ExecStart=/opt/defi-risk/venv/bin/gunicorn --workers 2 --threads 4 --bind 127.0.0.1:5050 --timeout 120 "app:create_app()"
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/defi-risk/web_portal.log
+StandardError=append:/var/log/defi-risk/web_portal.err.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Hodler Suite Risk worker (run one queued job)
+After=network-online.target hodler-web-portal.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hodler_risk_worker_run_once.sh
+

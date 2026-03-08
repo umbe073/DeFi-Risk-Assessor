@@ -1,0 +1,29 @@
+[Unit]
+Description=Hodler Suite Script API Runtime (webhook_server.py)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=linuxuser
+Group=linuxuser
+WorkingDirectory=/opt/hodler-suite/scripts/v2.0
+EnvironmentFile=-/opt/hodler-suite/webhook_server.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hodler-suite/.venv/bin/gunicorn --workers 2 --threads 4 --bind 127.0.0.1:5001 --timeout 180 webhook_server:app
+Restart=always
+RestartSec=3
+TimeoutStartSec=45
+TimeoutStopSec=45
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=027
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

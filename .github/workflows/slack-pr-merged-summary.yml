@@ -1,0 +1,54 @@
+name: Slack PR Merged Summary
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send merged summary to Slack
+        uses: actions/github-script@v7
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
+        with:
+          script: |
+            const webhook = process.env.SLACK_WEBHOOK_URL || "";
+            if (!webhook) {
+              core.warning("SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL is not configured; skipping Slack notification.");
+              return;
+            }
+
+            const pr = context.payload.pull_request;
+            const actor = context.payload.sender?.login || "unknown";
+            const mergedBy = pr.merged_by?.login || actor;
+            const additions = Number(pr.additions || 0);
+            const deletions = Number(pr.deletions || 0);
+            const changedFiles = Number(pr.changed_files || 0);
+            const body = {
+              text: [
+                "*PR merged*",
+                `• Repo: ${context.repo.owner}/${context.repo.repo}`,
+                `• PR: <${pr.html_url}|#${pr.number} ${pr.title}>`,
+                `• Branch: \`${pr.head.ref}\` → \`${pr.base.ref}\``,
+                `• Merged by: \`${mergedBy}\``,
+                `• Change summary: +${additions} / -${deletions} across ${changedFiles} file(s)`,
+              ].join("\n"),
+            };
+
+            const res = await fetch(webhook, {
+              method: "POST",
+              headers: { "Content-Type": "application/json; charset=utf-8" },
+              body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+              const raw = await res.text();
+              core.setFailed(`Slack webhook failed: HTTP ${res.status} ${raw}`);
+            }

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Partial Payment - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block payment-state-card payment-state-partial">
+  <h1>Partial Payment Detected</h1>
+  <p>
+    NOWPayments reported a partial payment for this order.
+    Please complete the remaining amount to activate your subscription.
+  </p>
+  <p><strong>Order ID:</strong> <code>{{ order_id or '-' }}</code></p>
+  <p><strong>Operation ID:</strong> <code>{{ payment_details.operation_id or '-' }}</code></p>
+  <p><strong>Status:</strong> {{ checkout.status if checkout else 'partially_paid' }}</p>
+  <p>
+    Your payment has been only partially fulfilled.
+    You still need to pay:
+    <strong>
+      {{ "%.8f"|format(partial_payment_summary.total_amount) }}
+      -
+      {{ "%.8f"|format(partial_payment_summary.paid_amount) }}
+      =
+      {{ "%.8f"|format(partial_payment_summary.remaining_amount) }}
+      {{ partial_payment_summary.price_currency }}
+    </strong>
+  </p>
+  <p>
+    Please contact Customer Support and provide this code to complete payment manually:
+    <code>{{ partial_payment_summary.manual_support_code or "-" }}</code>
+  </p>
+</section>
+
+<section class="panel-block">
+  <div class="row-actions">
+    <a class="link-button" href="{{ waiting_url }}">Continue Waiting For Confirmation</a>
+    <a class="link-button" href="{{ return_url }}">Return To Checkout</a>
+  </div>
+</section>
+{% endblock %}

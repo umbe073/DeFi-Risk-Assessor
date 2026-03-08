@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync Cloudflare IP ranges into UFW
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cloudflare_ufw_sync.sh
+
+[Install]
+WantedBy=multi-user.target

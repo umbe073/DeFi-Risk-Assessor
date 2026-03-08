@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Cloudflare UFW sync monthly
+
+[Timer]
+OnCalendar=monthly
+Persistent=true
+RandomizedDelaySec=2h
+Unit=cloudflare-ufw-sync.service
+
+[Install]
+WantedBy=timers.target

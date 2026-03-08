@@ -1,0 +1,334 @@
+name: Process PR From Slack Reaction
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number"
+        required: false
+      reaction:
+        description: "Slack reaction name (white_check_mark or no_entry)"
+        required: true
+      slack_user:
+        description: "Slack user id/name that reacted"
+        required: false
+      slack_channel:
+        description: "Slack channel id/name where reaction occurred"
+        required: false
+      event_ts:
+        description: "Slack event timestamp"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process Slack reaction
+        uses: actions/github-script@v7
+        env:
+          ALLOWED_SLACK_CHANNELS: ${{ vars.ALLOWED_SLACK_CHANNELS }}
+          MERGE_METHOD: ${{ vars.SLACK_PR_MERGE_METHOD }}
+          DELETE_BRANCH: ${{ vars.SLACK_PR_DELETE_BRANCH }}
+          CURSOR_PR_AUTOMATION_TOKEN_SET: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' }}
+        with:
+          github-token: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' && secrets.CURSOR_PR_AUTOMATION_TOKEN || github.token }}
+          script: |
+            function asLower(value) {
+              return String(value || "").trim().toLowerCase();
+            }
+
+            function firstDefined() {
+              for (var i = 0; i < arguments.length; i += 1) {
+                var value = arguments[i];
+                if (value !== undefined && value !== null && String(value).trim() !== "") {
+                  return value;
+                }
+              }
+              return undefined;
+            }
+
+            function toPositiveInt(value) {
+              if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+                return value;
+              }
+              if (typeof value === "string" && /^[0-9]+$/.test(value.trim())) {
+                return Number(value.trim());
+              }
+              return null;
+            }
+
+            function normalizeReaction(value) {
+              if (typeof value !== "string") return "";
+              var trimmed = value.trim().replace(/^:+|:+$/g, "").toLowerCase();
+              var aliases = {
+                "white_check_mark": "white_check_mark",
+                "white-check-mark": "white_check_mark",
+                "heavy_check_mark": "white_check_mark",
+                "heavy-check-mark": "white_check_mark",
+                "check_mark": "white_check_mark",
+                "check-mark": "white_check_mark",
+                "no_entry": "no_entry",
+                "no-entry": "no_entry",
+                "no_entry_sign": "no_entry",
+                "no-entry-sign": "no_entry",
+                "stop_sign": "no_entry",
+                "stop-sign": "no_entry"
+              };
+              return aliases[trimmed] || trimmed;
+            }
+
+            function normalizeChannel(value) {
+              if (typeof value !== "string") return "";
+              return value.trim().replace(/^#/, "").toLowerCase();
+            }
+
+            function isTruthy(value) {
+              return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+            }
+
+            function notice(key, message) {
+              core.notice("[" + key + "] " + String(message || ""));
+            }
+
+            var payload = context.payload && (context.payload.inputs || context.payload.client_payload) || {};
+
+            var reaction = normalizeReaction(
+              firstDefined(
+                payload.reaction,
+                payload.emoji,
+                payload.reaction_name,
+                payload.event && payload.event.reaction,
+                payload.slack && payload.slack.reaction
+              )
+            );
+            if (["white_check_mark", "no_entry"].indexOf(reaction) < 0) {
+              notice("ignored_reaction", "Unsupported reaction \"" + (reaction || "unknown") + "\".");
+              return;
+            }
+
+            var prNumber = toPositiveInt(
+              firstDefined(
+                payload.pr_number,
+                payload.pull_request_number,
+                payload.pr && payload.pr.number,
+                payload.number,
+                payload.event && payload.event.item && payload.event.item.pr_number
+              )
+            );
+            if (!prNumber) {
+              core.setFailed("[missing_pr_number] Missing valid pull request number in dispatch payload.");
+              return;
+            }
+
+            var channel = String(
+              firstDefined(
+                payload.slack_channel,
+                payload.channel,
+                payload.event && payload.event.item && payload.event.item.channel,
+                payload.event && payload.event.channel
+              ) || ""
+            );
+            var normalizedChannel = normalizeChannel(channel);
+            var allowedChannels = String(process.env.ALLOWED_SLACK_CHANNELS || "")
+              .split(",")
+              .map(function (v) { return normalizeChannel(v); })
+              .filter(Boolean);
+            if (allowedChannels.length > 0) {
+              if (!normalizedChannel || allowedChannels.indexOf(normalizedChannel) < 0) {
+                notice(
+                  "ignored_channel",
+                  "Reaction channel \"" + (channel || "unknown") + "\" not in ALLOWED_SLACK_CHANNELS (" + allowedChannels.join(", ") + ")."
+                );
+                return;
+              }
+            }
+
+            var slackUser = String(
+              firstDefined(
+                payload.slack_user,
+                payload.user,
+                payload.event && payload.event.user,
+                payload.actor
+              ) || "unknown"
+            );
+
+            var usingAutomationToken = String(process.env.CURSOR_PR_AUTOMATION_TOKEN_SET || "").toLowerCase() === "true";
+            if (!usingAutomationToken) {
+              notice(
+                "missing_token",
+                "CURSOR_PR_AUTOMATION_TOKEN is not set. Approvals may be created by github-actions[bot] and not count."
+              );
+            }
+
+            var owner = context.repo.owner;
+            var repo = context.repo.repo;
+            var pr = (await github.rest.pulls.get({
+              owner: owner,
+              repo: repo,
+              pull_number: prNumber
+            })).data;
+
+            if (pr.state !== "open") {
+              notice("not_open", "PR #" + prNumber + " is \"" + pr.state + "\", nothing to process.");
+              return;
+            }
+            if (pr.draft) {
+              notice("draft_pr", "PR #" + prNumber + " is draft; convert to ready first.");
+              return;
+            }
+
+            var reviewerLogin = "github-actions[bot]";
+            try {
+              var me = await github.rest.users.getAuthenticated();
+              if (me && me.data && me.data.login) {
+                reviewerLogin = me.data.login;
+              }
+            } catch (error) {
+              notice("auth_lookup_failed", "Could not resolve authenticated reviewer login: " + String(error));
+            }
+
+            var reviewerPermission = "unknown";
+            try {
+              var perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: owner,
+                repo: repo,
+                username: reviewerLogin
+              });
+              reviewerPermission = String((perm && perm.data && perm.data.permission) || "unknown");
+            } catch (error) {
+              notice("perm_lookup_failed", "Could not fetch permission for " + reviewerLogin + ": " + String(error));
+            }
+            if (["admin", "maintain", "write"].indexOf(asLower(reviewerPermission)) < 0) {
+              notice(
+                "review_not_counted",
+                "Reviewer " + reviewerLogin + " has permission \"" + reviewerPermission + "\". Approval may not satisfy branch rules."
+              );
+            }
+
+            var reviews = (await github.paginate(github.rest.pulls.listReviews, {
+              owner: owner,
+              repo: repo,
+              pull_number: prNumber,
+              per_page: 100
+            })) || [];
+
+            function latestReviewBy(userLogin, allReviews) {
+              for (var i = allReviews.length - 1; i >= 0; i -= 1) {
+                var row = allReviews[i];
+                var rowLogin = row && row.user && row.user.login ? row.user.login : "";
+                if (rowLogin === userLogin) return row;
+              }
+              return null;
+            }
+
+            var latestByReviewer = latestReviewBy(reviewerLogin, reviews);
+            var channelNote = channel ? (" in channel \"" + channel + "\"") : "";
+
+            if (reaction === "white_check_mark") {
+              if (!(latestByReviewer && latestByReviewer.state === "APPROVED")) {
+                await github.rest.pulls.createReview({
+                  owner: owner,
+                  repo: repo,
+                  pull_number: prNumber,
+                  event: "APPROVE",
+                  body: "Approved from Slack :white_check_mark: reaction by \"" + slackUser + "\"" + channelNote + "."
+                });
+              } else {
+                notice("already_approved", "PR #" + prNumber + " already has APPROVED review by " + reviewerLogin + ".");
+              }
+
+              var refreshed = (await github.paginate(github.rest.pulls.listReviews, {
+                owner: owner,
+                repo: repo,
+                pull_number: prNumber,
+                per_page: 100
+              })) || [];
+              var latestAfter = latestReviewBy(reviewerLogin, refreshed);
+              if (!(latestAfter && latestAfter.state === "APPROVED")) {
+                notice(
+                  "review_not_counted",
+                  "Approval review from " + reviewerLogin + " not visible after createReview; merge aborted."
+                );
+                return;
+              }
+
+              var mergeMethodInput = asLower(process.env.MERGE_METHOD || "squash");
+              var mergeMethod = ["merge", "squash", "rebase"].indexOf(mergeMethodInput) >= 0
+                ? mergeMethodInput
+                : "squash";
+
+              try {
+                var mergeResult = await github.rest.pulls.merge({
+                  owner: owner,
+                  repo: repo,
+                  pull_number: prNumber,
+                  merge_method: mergeMethod
+                });
+                if (!(mergeResult && mergeResult.data && mergeResult.data.merged)) {
+                  var mergeMessage = mergeResult && mergeResult.data ? mergeResult.data.message || "" : "";
+                  notice("merge_not_done", "GitHub API returned merged=false for PR #" + prNumber + ". message=\"" + mergeMessage + "\"");
+                  return;
+                }
+                notice("merged", "PR #" + prNumber + " merged by " + reviewerLogin + " using " + mergeMethod + ".");
+              } catch (error) {
+                var status = Number(error && error.status || 0);
+                var message = String(
+                  error && error.response && error.response.data && error.response.data.message
+                  || error && error.message
+                  || error
+                );
+                if ([405, 409, 422].indexOf(status) >= 0) {
+                  notice("merge_blocked", "PR #" + prNumber + " could not be auto-merged: " + message);
+                  return;
+                }
+                throw error;
+              }
+
+              if (isTruthy(process.env.DELETE_BRANCH || "true")) {
+                try {
+                  if (pr.head.ref !== pr.base.ref) {
+                    await github.rest.git.deleteRef({
+                      owner: owner,
+                      repo: repo,
+                      ref: "heads/" + pr.head.ref
+                    });
+                    notice("branch_deleted", "Deleted merged branch \"" + pr.head.ref + "\".");
+                  } else {
+                    notice("skip_delete_branch", "Head and base are identical (\"" + pr.head.ref + "\"), skip delete.");
+                  }
+                } catch (error) {
+                  var delStatus = Number(error && error.status || 0);
+                  var delMsg = String(
+                    error && error.response && error.response.data && error.response.data.message
+                    || error && error.message
+                    || error
+                  );
+                  notice("delete_branch_failed", "Could not delete branch \"" + pr.head.ref + "\": [" + delStatus + "] " + delMsg);
+                }
+              }
+              return;
+            }
+
+            if (!(latestByReviewer && latestByReviewer.state === "CHANGES_REQUESTED")) {
+              await github.rest.pulls.createReview({
+                owner: owner,
+                repo: repo,
+                pull_number: prNumber,
+                event: "REQUEST_CHANGES",
+                body: "Rejected from Slack :no_entry: reaction by \"" + slackUser + "\"" + channelNote + "."
+              });
+            } else {
+              notice("already_requested_changes", "PR #" + prNumber + " already has CHANGES_REQUESTED by " + reviewerLogin + ".");
+            }
+
+            await github.rest.pulls.update({
+              owner: owner,
+              repo: repo,
+              pull_number: prNumber,
+              state: "closed"
+            });
+            notice("closed", "PR #" + prNumber + " closed after Slack :no_entry: reaction by \"" + slackUser + "\"" + channelNote + ".");

@@ -1,0 +1,346 @@
+"""
+Token Mappings Configuration File
+================================
+
+This file contains all token mappings for the DeFi Risk Assessment system.
+You can easily add new tokens by modifying this file without touching the main scripts.
+
+To add a new token:
+1. Add the token address to ADDRESS_MAPPINGS
+2. Add the symbol to SYMBOL_MAPPINGS  
+3. Add CoinGecko ID to COINGECKO_MAPPINGS
+4. Add CoinPaprika ID to PAPRIKA_MAPPINGS
+5. Add estimated market cap to MARKET_CAP_ESTIMATES
+"""
+
+# Address to token name mappings
+ADDRESS_MAPPINGS = {
+    '0x3845badade8e6dff049820680d1f14bd3903a5d0': 'The Sandbox',
+    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'Aave',
+    '0x3506424f91fd33084466f402d5d97f05f8e3b4af': 'Chiliz',
+    '0xc00e94cb662c3520282e6f5717214004a7f26888': 'Compound',
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USD Coin',
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': 'Tether USD',
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'Wrapped Bitcoin',
+    '0x514910771af9ca656af840dff83e8264ecf986ca': 'Chainlink',
+    '0x111111111117dc0aa78b770fa6a738034120c302': '1inch',
+    '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'Polygon',
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'Uniswap',
+    '0x6b175474e89094c44da98b954eedeac495271d0f': 'Dai',
+    '0xc944e90c64b2c07662a292be6244bdf05cda44a7': 'The Graph',
+    '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'Maker',
+    '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2': 'SushiSwap',
+    '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'Gala Games',
+    '0x4a220e6096b25eadb88358cb44068a3248254675': 'Quant',
+    '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'Decentraland',
+    '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'Basic Attention Token',
+    '0x4200000000000000000000000000000000000042': 'Optimism',
+    '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRON',
+    '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38': 'Sonic'
+}
+
+# Address to symbol mappings
+SYMBOL_MAPPINGS = {
+    '0x3845badade8e6dff049820680d1f14bd3903a5d0': 'SAND',
+    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
+    '0x3506424f91fd33084466f402d5d97f05f8e3b4af': 'CHZ',
+    '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
+    '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
+    '0x111111111117dc0aa78b770fa6a738034120c302': '1INCH',
+    '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'POL',
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
+    '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
+    '0xc944e90c64b2c07662a292be6244bdf05cda44a7': 'GRT',
+    '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'MKR',
+    '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2': 'SUSHI',
+    '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'GALA',
+    '0x4a220e6096b25eadb88358cb44068a3248254675': 'QNT',
+    '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'MANA',
+    '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'BAT',
+    '0x4200000000000000000000000000000000000042': 'OP',
+    '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRX',
+    '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38': 'SONIC'
+}
+
+# CoinGecko ID mappings
+COINGECKO_MAPPINGS = {
+    'QNT': 'quant-network',
+    'GALA': 'gala',
+    'MANA': 'decentraland',
+    'SAND': 'the-sandbox',
+    'OP': 'optimism',
+    'TRX': 'tron',
+    'POL': 'matic-network',
+    'BAT': 'basic-attention-token',
+    'CHZ': 'chiliz',
+    'COMP': 'compound-governance-token',
+    'AAVE': 'aave',
+    'USDT': 'tether',
+    'USDC': 'usd-coin',
+    'DAI': 'dai',
+    'WBTC': 'wrapped-bitcoin',
+    'LINK': 'chainlink',
+    '1INCH': '1inch',
+    'UNI': 'uniswap',
+    'GRT': 'the-graph',
+    'MKR': 'maker',
+    'SUSHI': 'sushi',
+    'SONIC': 'sonic',
+    'S': 'sonic'
+}
+
+# CoinPaprika ID mappings
+PAPRIKA_MAPPINGS = {
+    'QNT': 'qnt-quant',
+    'GALA': 'gala-gala',
+    'MANA': 'mana-decentraland',
+    'SAND': 'sand-the-sandbox',
+    'OP': 'op-optimism',
+    'TRX': 'trx-tron',
+    'POL': 'matic-polygon',
+    'BAT': 'bat-basic-attention-token',
+    'CHZ': 'chz-chiliz',
+    'COMP': 'comp-compound',
+    'AAVE': 'aave-aave',
+    'USDT': 'usdt-tether',
+    'USDC': 'usdc-usd-coin',
+    'DAI': 'dai-dai',
+    'WBTC': 'wbtc-wrapped-bitcoin',
+    'LINK': 'link-chainlink',
+    '1INCH': '1inch-1inch',
+    'UNI': 'uni-uniswap',
+    'GRT': 'grt-the-graph',
+    'MKR': 'mkr-maker',
+    'SUSHI': 'sushi-sushiswap',
+    'SONIC': 'sonic-sonic'
+}
+
+# Market cap estimates (in USD) for fallback when APIs fail
+MARKET_CAP_ESTIMATES = {
+    'USDT': 160_000_000_000,  # ~$160B
+    'USDC': 65_000_000_000,   # ~$65B
+    'DAI': 5_000_000_000,     # ~$5B
+    'WBTC': 14_000_000_000,   # ~$14B
+    'LINK': 8_000_000_000,    # ~$8B
+    'UNI': 4_000_000_000,     # ~$4B
+    'AAVE': 4_000_000_000,    # ~$4B
+    'COMP': 400_000_000,      # ~$400M
+    'MKR': 1_000_000_000,     # ~$1B
+    'SUSHI': 200_000_000,     # ~$200M
+    'GRT': 1_500_000_000,     # ~$1.5B
+    '1INCH': 500_000_000,     # ~$500M
+    'POL': 8_000_000_000,     # ~$8B (Polygon)
+    'OP': 1_200_000_000,      # ~$1.2B
+    'QNT': 1_000_000_000,     # ~$1B
+    'GALA': 200_000_000,      # ~$200M
+    'SAND': 800_000_000,      # ~$800M
+    'MANA': 600_000_000,      # ~$600M
+    'BAT': 200_000_000,       # ~$200M
+    'CHZ': 400_000_000,       # ~$400M
+    'TRX': 30_000_000_000,    # ~$30B
+    'SONIC': 1_000_000        # ~$1M
+}
+
+# Holder estimates for fallback when APIs fail
+HOLDER_ESTIMATES = {
+    'USDT': 8_000_000,        # ~8M holders
+    'USDC': 3_500_000,        # ~3.5M holders
+    'DAI': 500_000,           # ~500k holders
+    'WBTC': 130_000,          # ~130k holders
+    'LINK': 750_000,          # ~750k holders
+    'UNI': 350_000,           # ~350k holders
+    'AAVE': 190_000,          # ~190k holders
+    'COMP': 210_000,          # ~210k holders
+    'MKR': 95_000,            # ~95k holders
+    'SUSHI': 120_000,         # ~120k holders
+    'GRT': 170_000,           # ~170k holders
+    '1INCH': 110_000,         # ~110k holders
+    'POL': 65_000,            # ~65k holders
+    'OP': 150_000,            # ~150k holders
+    'QNT': 160_000,           # ~160k holders
+    'GALA': 220_000,          # ~220k holders
+    'SAND': 205_000,          # ~205k holders
+    'MANA': 290_000,          # ~290k holders
+    'BAT': 435_000,           # ~435k holders
+    'CHZ': 90_000,            # ~90k holders
+    'TRX': 18_000,            # ~18k holders
+    'SONIC': 24               # ~24 holders
+}
+
+# Token type classifications
+TOKEN_TYPES = {
+    'USDT': 'Stablecoin',
+    'USDC': 'Stablecoin', 
+    'DAI': 'Stablecoin',
+    'WBTC': 'Wrapped Token',
+    'LINK': 'Oracle',
+    '1INCH': 'DEX Aggregator',
+    'UNI': 'DEX',
+    'GRT': 'Indexing Protocol',
+    'MKR': 'DeFi Governance',
+    'SUSHI': 'DEX',
+    'COMP': 'DeFi Lending',
+    'AAVE': 'DeFi Lending',
+    'OP': 'Layer-2 Protocol',
+    'TRX': 'Layer-1 Protocol',
+    'POL': 'Layer-2 Protocol',
+    'BAT': 'Advertising',
+    'CHZ': 'Sports',
+    'QNT': 'Layer-1 Protocol',
+    'GALA': 'Gaming',
+    'SAND': 'Metaverse',
+    'MANA': 'Metaverse',
+    'SONIC': 'Layer-1 Protocol'
+}
+
+def get_token_name(address):
+    """Get token name from address"""
+    return ADDRESS_MAPPINGS.get(address.lower(), 'Unknown Token')
+
+def get_token_symbol(address):
+    """Get token symbol from address"""
+    return SYMBOL_MAPPINGS.get(address.lower(), 'Unknown')
+
+def get_coingecko_id(symbol):
+    """Get CoinGecko ID from symbol"""
+    return COINGECKO_MAPPINGS.get(symbol.upper())
+
+def get_paprika_id(symbol):
+    """Get CoinPaprika ID from symbol"""
+    return PAPRIKA_MAPPINGS.get(symbol.upper())
+
+def get_market_cap_estimate(symbol):
+    """Get estimated market cap from symbol"""
+    return MARKET_CAP_ESTIMATES.get(symbol.upper(), 0)
+
+def get_holder_estimate(symbol):
+    """Get estimated holder count from symbol"""
+    return HOLDER_ESTIMATES.get(symbol.upper(), 0)
+
+def get_token_type(symbol):
+    """Get token type from symbol"""
+    return TOKEN_TYPES.get(symbol.upper(), 'Unknown')
+
+def add_new_token(address, name, symbol, coingecko_id=None, paprika_id=None, 
+                  market_cap_estimate=0, token_type='Unknown'):
+    """Add a new token to all mappings"""
+    address_lower = address.lower()
+    
+    ADDRESS_MAPPINGS[address_lower] = name
+    SYMBOL_MAPPINGS[address_lower] = symbol.upper()
+    
+    if coingecko_id:
+        COINGECKO_MAPPINGS[symbol.upper()] = coingecko_id
+    
+    if paprika_id:
+        PAPRIKA_MAPPINGS[symbol.upper()] = paprika_id
+    
+    if market_cap_estimate > 0:
+        MARKET_CAP_ESTIMATES[symbol.upper()] = market_cap_estimate
+    
+    if token_type != 'Unknown':
+        TOKEN_TYPES[symbol.upper()] = token_type
+    
+    print(f"✅ Added new token: {name} ({symbol}) at {address}")
+    print(f"   CoinGecko ID: {coingecko_id or 'Not set'}")
+    print(f"   CoinPaprika ID: {paprika_id or 'Not set'}")
+    print(f"   Estimated Market Cap: ${market_cap_estimate:,}" if market_cap_estimate > 0 else "   Estimated Market Cap: Not set")
+    print(f"   Token Type: {token_type}")
+
+# Example usage:
+# add_new_token(
+#     address='0x1234567890123456789012345678901234567890',
+#     name='My New Token',
+#     symbol='MNT',
+#     coingecko_id='my-new-token',
+#     paprika_id='mnt-my-new-token',
+#     market_cap_estimate=100_000_000,
+#     token_type='DeFi Protocol'
+# )
+
+def get_cmc_id(symbol):
+    """Get CoinMarketCap ID from the CMC symbol map"""
+    try:
+        import os
+        import json
+        
+        # Path to CMC symbol map
+        cmc_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'cmc_symbol_map.json')
+        
+        if os.path.exists(cmc_file):
+            with open(cmc_file, 'r') as f:
+                cmc_data = json.load(f)
+                
+            # Look for symbol (case insensitive)
+            symbol_lower = symbol.lower()
+            if symbol_lower in cmc_data:
+                return cmc_data[symbol_lower]['id']
+            
+            # Try uppercase
+            symbol_upper = symbol.upper()
+            if symbol_upper.lower() in cmc_data:
+                return cmc_data[symbol_upper.lower()]['id']
+                
+    except Exception as e:
+        print(f"Warning: Could not load CMC symbol map: {e}")
+    
+    return None
+
+def get_cmc_name(symbol):
+    """Get CoinMarketCap name from the CMC symbol map"""
+    try:
+        import os
+        import json
+        
+        # Path to CMC symbol map
+        cmc_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'cmc_symbol_map.json')
+        
+        if os.path.exists(cmc_file):
+            with open(cmc_file, 'r') as f:
+                cmc_data = json.load(f)
+                
+            # Look for symbol (case insensitive)
+            symbol_lower = symbol.lower()
+            if symbol_lower in cmc_data:
+                return cmc_data[symbol_lower]['name']
+            
+            # Try uppercase
+            symbol_upper = symbol.upper()
+            if symbol_upper.lower() in cmc_data:
+                return cmc_data[symbol_upper.lower()]['name']
+                
+    except Exception as e:
+        print(f"Warning: Could not load CMC symbol map: {e}")
+    
+    return None
+
+def get_cmc_slug(symbol):
+    """Get CoinMarketCap slug from the CMC symbol map"""
+    try:
+        import os
+        import json
+        
+        # Path to CMC symbol map
+        cmc_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'cmc_symbol_map.json')
+        
+        if os.path.exists(cmc_file):
+            with open(cmc_file, 'r') as f:
+                cmc_data = json.load(f)
+                
+            # Look for symbol (case insensitive)
+            symbol_lower = symbol.lower()
+            if symbol_lower in cmc_data:
+                return cmc_data[symbol_lower]['slug']
+            
+            # Try uppercase
+            symbol_upper = symbol.upper()
+            if symbol_upper.lower() in cmc_data:
+                return cmc_data[symbol_upper.lower()]['slug']
+                
+    except Exception as e:
+        print(f"Warning: Could not load CMC symbol map: {e}")
+    
+    return None

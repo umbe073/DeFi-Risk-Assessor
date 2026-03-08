@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Docs - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block">
+  <h1>Documentation</h1>
+  <p>
+    Public documentation for Hodler Suite is published with a security-redaction process, so architecture and workflows are visible
+    without exposing internal paths, secrets, or sensitive operational details.
+  </p>
+  <div class="row-actions">
+    <a class="link-button" href="{{ public_docs_url }}" target="_blank" rel="noopener noreferrer">
+      Open Public Docs Portal
+    </a>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>What You Will Find</h2>
+  <ul class="portal-list">
+    <li>Platform overview and risk scoring methodology.</li>
+    <li>User workflow for signup, verification, plans, and ticket handling.</li>
+    <li>Service architecture, billing lifecycle, and security controls.</li>
+    <li>Operational status/reconciliation concepts for enterprise users.</li>
+  </ul>
+  <p class="inline-note">
+    For implementation-specific onboarding, open a support ticket from
+    <a href="{{ url_for('pages.help_center') }}">Help Center</a>.
+  </p>
+</section>
+{% endblock %}

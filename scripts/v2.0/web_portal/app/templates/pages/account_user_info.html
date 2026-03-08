@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}User Info - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block">
+  <h1>User Info</h1>
+  <p class="inline-note">Access is restricted to master/admin accounts and only through Account -> Info.</p>
+  <p><strong>User ID:</strong> {{ target_user.uid }} | <strong>Email:</strong> {{ target_user.email }}</p>
+  <a class="link-button" href="{{ url_for('pages.account_page') }}">Back to Account</a>
+</section>
+
+<section class="panel-block">
+  <h2>Profile Details</h2>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><th>ID</th><td>{{ target_user.id }}</td><th>Role</th><td>{{ target_user.role }}</td></tr>
+        <tr><th>Name</th><td>{{ target_user.first_name or '-' }}</td><th>Surname</th><td>{{ target_user.last_name or '-' }}</td></tr>
+        <tr><th>Date of Birth</th><td>{{ target_user.date_of_birth or '-' }}</td><th>Gender</th><td>{{ target_user.gender or '-' }}</td></tr>
+        <tr><th>Corporate Account</th><td>{{ 'yes' if target_user.is_corporate_account else 'no' }}</td><th>Region</th><td>{{ target_user.base_region or '-' }}</td></tr>
+        <tr><th>Status</th><td>{{ 'active' if target_user.is_active else 'disabled' }}</td><th>2FA</th><td>{{ 'on' if target_user.totp_enabled else 'off' }}</td></tr>
+        <tr><th>Parent</th><td>{% if parent_user %}{{ parent_user.uid }} ({{ parent_user.email }}){% else %}-{% endif %}</td><th>Created At</th><td>{{ target_user.created_at or '-' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Registration Context</h2>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><th>Registration Time (UTC)</th><td>{{ target_user.registration_recorded_at or '-' }}</td></tr>
+        <tr><th>Registration IP</th><td>{{ target_user.registration_ip or '-' }}</td></tr>
+        <tr><th>Country</th><td>{{ target_user.registration_country_flag or '🌐' }} {{ target_user.registration_country_code or '-' }} {{ target_user.registration_country_name or '' }}</td></tr>
+        <tr><th>VPN</th><td>{% if target_user.registration_ip_is_vpn is sameas true %}Yes{% elif target_user.registration_ip_is_vpn is sameas false %}No{% else %}Unknown{% endif %}</td></tr>
+        <tr><th>Residential Proxy</th><td>{% if target_user.registration_ip_is_residential_proxy is sameas true %}Yes{% elif target_user.registration_ip_is_residential_proxy is sameas false %}No{% else %}Unknown{% endif %}</td></tr>
+        <tr><th>Other Proxy</th><td>{% if target_user.registration_ip_is_other_proxy is sameas true %}Yes{% elif target_user.registration_ip_is_other_proxy is sameas false %}No{% else %}Unknown{% endif %}</td></tr>
+        <tr><th>Datacenter</th><td>{% if target_user.registration_ip_is_datacenter is sameas true %}Yes{% elif target_user.registration_ip_is_datacenter is sameas false %}No{% else %}Unknown{% endif %}</td></tr>
+        <tr><th>Hosting</th><td>{% if target_user.registration_ip_is_hosting is sameas true %}Yes{% elif target_user.registration_ip_is_hosting is sameas false %}No{% else %}Unknown{% endif %}</td></tr>
+        <tr><th>Device UUID</th><td>{{ target_user.registration_device_uuid or '-' }}</td></tr>
+        <tr><th>Device Type</th><td>{{ target_user.registration_device_type or '-' }}</td></tr>
+        <tr><th>OS</th><td>{{ target_user.registration_os_name or '-' }} {{ target_user.registration_os_version or '' }}</td></tr>
+        <tr><th>Browser</th><td>{{ target_user.registration_browser_name or '-' }} {{ target_user.registration_browser_version or '' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Known Devices</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Device UUID</th>
+          <th>Type</th>
+          <th>OS</th>
+          <th>Browser</th>
+          <th>Last IP</th>
+          <th>Country</th>
+          <th>First Seen</th>
+          <th>Last Seen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for device in user_devices %}
+        <tr>
+          <td>{{ device.device_uuid or '-' }}</td>
+          <td>{{ device.device_type or '-' }}</td>
+          <td>{{ device.os_name or '-' }} {{ device.os_version or '' }}</td>
+          <td>{{ device.browser_name or '-' }} {{ device.browser_version or '' }}</td>
+          <td>{{ device.last_ip_address or '-' }}</td>
+          <td>{{ device.last_country_flag or '🌐' }} {{ device.last_country_code or '-' }} {{ device.last_country_name or '' }}</td>
+          <td>{{ device.first_seen_at or '-' }}</td>
+          <td>{{ device.last_seen_at or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No device records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>User Operation Log</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Operation ID</th>
+          <th>When (UTC)</th>
+          <th>Type</th>
+          <th>Actor</th>
+          <th>IP</th>
+          <th>Country</th>
+          <th>VPN/Proxy</th>
+          <th>Device</th>
+          <th>OS/Browser</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for op in user_operations %}
+        <tr>
+          <td>{{ op.operation_id }}</td>
+          <td>{{ op.created_at_utc or '-' }}</td>
+          <td>
+            <span class="{{ op.type_tag_class_name }}" title="{{ op.type_tag_title }}">{{ op.type_tag_label }}</span>
+            <div class="op-type-raw">{{ op.operation_type }}</div>
+          </td>
+          <td>{{ op.actor_email or '-' }}</td>
+          <td>{{ op.ip_address or '-' }}</td>
+          <td>{{ op.country_flag or '🌐' }} {{ op.country_code or '-' }} {{ op.country_name or '' }}</td>
+          <td>
+            vpn:{% if op.is_vpn is sameas true %}Y{% elif op.is_vpn is sameas false %}N{% else %}?{% endif %}
+            / rp:{% if op.is_residential_proxy is sameas true %}Y{% elif op.is_residential_proxy is sameas false %}N{% else %}?{% endif %}
+            / p:{% if op.is_other_proxy is sameas true %}Y{% elif op.is_other_proxy is sameas false %}N{% else %}?{% endif %}
+          </td>
+          <td>{{ op.device_uuid or '-' }} ({{ op.device_type or '-' }})</td>
+          <td>{{ op.os_name or '-' }} {{ op.os_version or '' }} | {{ op.browser_name or '-' }} {{ op.browser_version or '' }}</td>
+          <td>{{ op.details }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10">No operation records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

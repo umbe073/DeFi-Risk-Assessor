@@ -1,0 +1,109 @@
+name: PR Checks
+
+# Runs on every PR targeting main, and on pushes to feature branches.
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - 'fix/**'
+      - 'feature/**'
+      - 'bug/**'
+      - 'hotfix/**'
+
+jobs:
+  lint-and-check:
+    name: Lint & syntax check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install linting tools
+        run: |
+          pip install -q flake8 pyflakes
+
+      # Install project deps so imports resolve correctly during checks
+      - name: Install project dependencies
+        run: |
+          pip install -q -r requirements.txt 2>/dev/null || true
+          pip install -q -r scripts/v2.0/web_portal/requirements.txt 2>/dev/null || true
+
+      # Catch syntax errors across all Python files — hard fail
+      - name: Python syntax check (pyflakes)
+        run: |
+          find scripts/ -name "*.py" | xargs python -m pyflakes 2>&1 | tee /tmp/pyflakes.txt
+          # Fail if there are undefined name / import errors
+          grep -E "undefined name|unable to detect" /tmp/pyflakes.txt && exit 1 || true
+
+      # Style lint — warning only (won't block merge)
+      - name: Flake8 style lint
+        run: |
+          flake8 scripts/ \
+            --max-line-length=120 \
+            --extend-ignore=E501,W503,E203 \
+            --exclude=__pycache__,data,logs \
+            --statistics \
+          || true   # non-blocking: style warnings show in PR but don't block
+
+      # Ensure no real .env file was accidentally committed
+      - name: Secret leak guard — no .env files
+        run: |
+          FOUND=$(find . -name ".env" ! -name ".env.example" ! -path "./.git/*" 2>/dev/null)
+          if [ -n "$FOUND" ]; then
+            echo "::error::Real .env file committed: $FOUND"
+            exit 1
+          fi
+          echo "No .env files found — OK"
+
+      # Ensure no SQLite databases were accidentally committed
+      - name: Secret leak guard — no .db files
+        run: |
+          FOUND=$(find . -name "*.db" ! -path "./.git/*" 2>/dev/null)
+          if [ -n "$FOUND" ]; then
+            echo "::error::SQLite database committed: $FOUND"
+            exit 1
+          fi
+          echo "No .db files found — OK"
+
+      # Basic check: config.py must not contain hardcoded secrets
+      - name: Secret leak guard — no hardcoded keys in config.py
+        run: |
+          python - << 'EOF'
+          import re, sys, pathlib
+
+          PATTERNS = [
+              r'(?i)(api_key|secret_key|password|token)\s*=\s*["\'][^"\']{8,}["\']',
+          ]
+          SAFE_PATTERNS = [
+              r'change-this',
+              r'change-master',
+              r'os\.getenv',
+              r'environ',
+          ]
+
+          issues = []
+          for f in pathlib.Path("scripts").rglob("config*.py"):
+              content = f.read_text(errors="replace")
+              for line_no, line in enumerate(content.splitlines(), 1):
+                  for pat in PATTERNS:
+                      if re.search(pat, line):
+                          if not any(re.search(safe, line) for safe in SAFE_PATTERNS):
+                              issues.append(f"{f}:{line_no}: {line.strip()}")
+
+          if issues:
+              print("::error::Possible hardcoded secret(s) detected:")
+              for i in issues:
+                  print(f"  {i}")
+              sys.exit(1)
+          print("No hardcoded secrets detected — OK")
+          EOF

@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Live Assessment - Hodler Suite{% endblock %}
+{% block content %}
+<section
+  class="panel-block"
+  id="risk-live-assessment-root"
+  data-initial-job-id="{% if selected_job %}{{ selected_job.job_id }}{% endif %}"
+>
+  <h1>Live Assessment</h1>
+  <p>Start a token assessment and track stage-by-stage worker progress.</p>
+  <form id="risk-job-form" class="stacked-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="token_address">Token address</label>
+    <input id="token_address" name="token_address" type="text" placeholder="0x..." required>
+    <label for="token_chain">Token chain (optional)</label>
+    <input id="token_chain" name="token_chain" type="text" placeholder="eth / bsc / tron">
+    <label for="risk_mode">Mode</label>
+    <select id="risk_mode" name="mode">
+      <option value="global">Global</option>
+      <option value="eu">EU</option>
+    </select>
+    <button type="submit">Start Assessment</button>
+    <p id="risk-create-feedback" class="inline-note"></p>
+  </form>
+</section>
+
+<section class="panel-block">
+  <h2>Job Status</h2>
+  {% if selected_job %}
+  <div class="stat-grid">
+    <div class="stat-card"><strong>Job ID</strong><p id="job-id">{{ selected_job.job_id }}</p></div>
+    <div class="stat-card"><strong>Status</strong><p id="job-status">{{ selected_job.status }}</p></div>
+    <div class="stat-card"><strong>Stage</strong><p id="job-stage">{{ selected_job.stage }}</p></div>
+    <div class="stat-card"><strong>Token</strong><p id="job-token"><code>{{ selected_job.token_address }}</code></p></div>
+  </div>
+  <p class="inline-note">Progress: <span id="job-progress-label">{{ selected_job.progress }}</span>%</p>
+  <div class="progress-wrap">
+    <div id="job-progress-bar" class="progress-bar" style="width: {{ selected_job.progress }}%;"></div>
+  </div>
+  <ol id="phase-tracker" class="phase-tracker">
+    <li data-phase="queued">Queued</li>
+    <li data-phase="fetching">Fetching Token Data</li>
+    <li data-phase="analyzing">Analyzing Security &amp; Market Data</li>
+    <li data-phase="finalizing">Generating Final Reports</li>
+    <li data-phase="succeeded">Completed</li>
+  </ol>
+  <div class="stat-grid">
+    <div class="stat-card"><strong>Risk Score</strong><p id="summary-risk-score">-</p></div>
+    <div class="stat-card"><strong>Risk Band</strong><p id="summary-risk-band">-</p></div>
+    <div class="stat-card"><strong>Confidence</strong><p id="summary-confidence">-</p></div>
+    <div class="stat-card"><strong>Holders</strong><p id="summary-holders">-</p></div>
+    <div class="stat-card"><strong>Market Cap</strong><p id="summary-market-cap">-</p></div>
+    <div class="stat-card"><strong>Liquidity</strong><p id="summary-liquidity">-</p></div>
+    <div class="stat-card"><strong>24h Volume</strong><p id="summary-volume-24h">-</p></div>
+  </div>
+  <pre id="job-log-box" class="log-box">{% if selected_job.events %}{% for event in selected_job.events|reverse %}[{{ event.created_at_utc }}] [{{ event.stage }}] {{ event.message or event.event_type }}
+{% endfor %}{% else %}[queued] Waiting for worker updates...
+{% endif %}</pre>
+  {% if selected_job.artifacts and selected_job.artifacts[0].metadata and selected_job.artifacts[0].metadata.red_flags %}
+  <details open>
+    <summary>Detected Red Flags</summary>
+    <ul id="red-flags-list" class="simple-list">
+      {% for flag in selected_job.artifacts[0].metadata.red_flags %}
+      <li>{{ flag }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% else %}
+  <ul id="red-flags-list" class="simple-list"><li>No red flags detected in current snapshot.</li></ul>
+  {% endif %}
+  {% if selected_job.artifacts %}
+  <details>
+    <summary>Latest Artifact Metadata (Raw)</summary>
+    <pre id="job-artifact-box" class="log-box">{{ selected_job.artifacts[0].metadata | tojson(indent=2) }}</pre>
+  </details>
+  {% else %}
+  <pre id="job-artifact-box" class="log-box">No artifacts yet.</pre>
+  {% endif %}
+  {% else %}
+  <p class="inline-note">No job selected yet. Submit a token above to create one.</p>
+  <div class="progress-wrap">
+    <div id="job-progress-bar" class="progress-bar" style="width: 0%;"></div>
+  </div>
+  <ol id="phase-tracker" class="phase-tracker">
+    <li data-phase="queued">Queued</li>
+    <li data-phase="fetching">Fetching Token Data</li>
+    <li data-phase="analyzing">Analyzing Security &amp; Market Data</li>
+    <li data-phase="finalizing">Generating Final Reports</li>
+    <li data-phase="succeeded">Completed</li>
+  </ol>
+  <pre id="job-log-box" class="log-box">[idle] Waiting for a job...</pre>
+  <ul id="red-flags-list" class="simple-list"><li>No red flags detected in current snapshot.</li></ul>
+  <pre id="job-artifact-box" class="log-box">No artifacts yet.</pre>
+  {% endif %}
+</section>
+
+<section class="panel-block">
+  <h2>Recent Jobs</h2>
+  {% if recent_jobs %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Job ID</th>
+          <th>Created (UTC)</th>
+          <th>Status</th>
+          <th>Stage</th>
+          <th>Progress</th>
+          <th>Token</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in recent_jobs %}
+        <tr>
+          <td><a href="{{ url_for('pages.live_assessment', job_id=job.job_id) }}">{{ job.job_id }}</a></td>
+          <td>{{ job.created_at_utc }}</td>
+          <td>{{ job.status }}</td>
+          <td>{{ job.stage }}</td>
+          <td>{{ job.progress }}%</td>
+          <td><code>{{ job.token_address }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="inline-note">No recent jobs.</p>
+  {% endif %}
+</section>
+<section class="panel-block">
+  <h2>Service Attestations</h2>
+  <p class="inline-note">Our results are based on the following services:</p>
+  <div class="service-logo-grid">
+    <a class="service-logo-link service-logo-coingecko" href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer" title="Open CoinGecko">
+      <img src="{{ url_for('static', filename='img/providers/coingecko.png', v='20260306a') }}" alt="CoinGecko">
+    </a>
+    <a class="service-logo-link service-logo-bitquery" href="https://bitquery.io/" target="_blank" rel="noopener noreferrer" title="Open Bitquery">
+      <img src="{{ url_for('static', filename='img/providers/bitquery.jpg', v='20260306a') }}" alt="Bitquery">
+    </a>
+    <a class="service-logo-link service-logo-defillama" href="https://defillama.com/" target="_blank" rel="noopener noreferrer" title="Open DeFiLlama">
+      <img src="{{ url_for('static', filename='img/providers/defillama.jpg', v='20260306a') }}" alt="DeFiLlama">
+    </a>
+    <a class="service-logo-link service-logo-alchemy" href="https://www.alchemy.com/" target="_blank" rel="noopener noreferrer" title="Open Alchemy">
+      <img src="{{ url_for('static', filename='img/providers/alchemy.jpg', v='20260306a') }}" alt="Alchemy">
+    </a>
+    <a class="service-logo-link service-logo-oneinch" href="https://1inch.io/" target="_blank" rel="noopener noreferrer" title="Open 1inch">
+      <img src="{{ url_for('static', filename='img/providers/oneinch.png', v='20260306a') }}" alt="1inch">
+    </a>
+    <a class="service-logo-link service-logo-chainalysis" href="https://www.chainalysis.com/" target="_blank" rel="noopener noreferrer" title="Open Chainalysis">
+      <img src="{{ url_for('static', filename='img/providers/chainalysis.png', v='20260306a') }}" alt="Chainalysis Oracle">
+    </a>
+    <a class="service-logo-link service-logo-ofac" href="https://www.treasury.gov/ofac/" target="_blank" rel="noopener noreferrer" title="Open OFAC">
+      <img src="{{ url_for('static', filename='img/providers/ofac.jpg', v='20260306a') }}" alt="OFAC">
+    </a>
+    <a class="service-logo-link service-logo-etherscan" href="https://etherscan.io/" target="_blank" rel="noopener noreferrer" title="Open Etherscan">
+      <img src="{{ url_for('static', filename='img/providers/etherscan.png', v='20260306a') }}" alt="Etherscan">
+    </a>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/live_assessment.js', v='20260305b') }}"></script>
+{% endblock %}

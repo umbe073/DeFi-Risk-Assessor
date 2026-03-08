@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Hodler Suite Resend inbound fallback sync every 2 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+RandomizedDelaySec=20s
+Persistent=true
+Unit=support-resend-sync.service
+
+[Install]
+WantedBy=timers.target
+

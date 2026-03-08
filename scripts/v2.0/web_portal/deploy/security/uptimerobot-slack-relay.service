@@ -1,0 +1,10 @@
+[Unit]
+Description=Hodler Suite UptimeRobot to Slack relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/uptimerobot-slack-relay
+ExecStart=/usr/local/sbin/uptimerobot_slack_relay.sh
+User=root

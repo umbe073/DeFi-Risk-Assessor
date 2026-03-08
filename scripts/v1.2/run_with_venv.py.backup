@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""
+Run Application with Virtual Environment
+Ensures the application uses the correct Python environment with all dependencies
+"""
+
+import os
+import sys
+import subprocess
+from pathlib import Path
+
+def get_venv_python():
+    """Get the Python executable from the virtual environment"""
+    # Get the current script's directory
+    current_dir = Path(__file__).parent
+    # Go up two levels to reach the venv root
+    venv_root = current_dir.parent.parent
+    venv_python = venv_root / "bin" / "python3"
+    
+    if venv_python.exists():
+        return str(venv_python)
+    else:
+        raise FileNotFoundError(f"Virtual environment Python not found at {venv_python}")
+
+def check_dependencies():
+    """Check if required dependencies are installed"""
+    venv_python = get_venv_python()
+    
+    try:
+        # Test cryptography import
+        result = subprocess.run([venv_python, "-c", "import cryptography"], 
+                              capture_output=True, text=True)
+        if result.returncode != 0:
+            print("❌ Cryptography library not found. Installing...")
+            subprocess.run([venv_python, "-m", "pip", "install", "cryptography"], 
+                         check=True)
+            print("✅ Cryptography installed successfully!")
+        else:
+            print("✅ Cryptography library is available")
+            
+    except Exception as e:
+        print(f"❌ Error checking dependencies: {e}")
+        return False
+    
+    return True
+
+def run_secure_credentials():
+    """Run the secure credentials management"""
+    venv_python = get_venv_python()
+    script_path = Path(__file__).parent / "credential_management" / "secure_credentials.py"
+    
+    # Get the command from sys.argv[2] since sys.argv[1] is "credentials"
+    if len(sys.argv) < 3:
+        print("🔐 Secure Credential Management")
+        print("=" * 40)
+        print("Usage:")
+        print("  python run_with_venv.py credentials setup    - Setup Vespia credentials")
+        print("  python run_with_venv.py credentials list     - List stored services")
+        print("  python run_with_venv.py credentials remove   - Remove Vespia credentials")
+        print("  python run_with_venv.py credentials test     - Test Vespia credentials")
+        print("  python run_with_venv.py credentials setup_vespia - Run Vespia setup wizard")
+        return
+    
+    command = sys.argv[2].lower()
+    
+    if command == "setup_vespia":
+        setup_script = Path(__file__).parent / "credential_management" / "setup_vespia.py"
+        subprocess.run([venv_python, str(setup_script)])
+    else:
+        # Pass the command to secure_credentials.py
+        subprocess.run([venv_python, str(script_path)] + sys.argv[2:])
+
+def run_risk_assessment():
+    """Run the risk assessment with proper environment"""
+    venv_python = get_venv_python()
+    script_path = Path(__file__).parent / "defi_complete_risk_assessment.py"
+    
+    print("🔍 Running DeFi Risk Assessment...")
+    print(f"Using Python: {venv_python}")
+    print("=" * 50)
+    
+    # Run the risk assessment
+    subprocess.run([venv_python, str(script_path)] + sys.argv[1:])
+
+def main():
+    """Main function"""
+    if len(sys.argv) < 2:
+        print("🚀 Application Runner")
+        print("=" * 30)
+        print("Usage:")
+        print("  python run_with_venv.py credentials [command] - Manage secure credentials")
+        print("  python run_with_venv.py manage_creds - Easy credential management")
+        print("  python run_with_venv.py risk_assessment [args] - Run risk assessment")
+        print("  python run_with_venv.py check_deps - Check dependencies")
+        return
+    
+    command = sys.argv[1].lower()
+    
+    try:
+        if command == "credentials":
+            # Pass the command directly to secure_credentials
+            run_secure_credentials()
+        elif command == "manage_creds":
+            # Run the credential management tool
+            venv_python = get_venv_python()
+            manage_script = Path(__file__).parent / "credential_management" / "manage_credentials.py"
+            subprocess.run([venv_python, str(manage_script)])
+        elif command == "risk_assessment":
+            # Remove 'risk_assessment' from argv and pass rest to risk assessment
+            sys.argv = sys.argv[2:] if len(sys.argv) > 2 else []
+            run_risk_assessment()
+        elif command == "check_deps":
+            check_dependencies()
+        else:
+            print(f"❌ Unknown command: {command}")
+            print("Available commands: credentials, manage_creds, risk_assessment, check_deps")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        print("Make sure you're running this from the scripts/v1.2 directory")
+
+if __name__ == "__main__":
+    main() 

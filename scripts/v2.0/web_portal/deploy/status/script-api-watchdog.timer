@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Hodler Suite Script API watchdog every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+RandomizedDelaySec=10s
+Persistent=true
+Unit=script-api-watchdog.service
+
+[Install]
+WantedBy=timers.target

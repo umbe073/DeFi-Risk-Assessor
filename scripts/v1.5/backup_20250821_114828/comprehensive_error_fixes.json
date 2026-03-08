@@ -1,0 +1,151 @@
+{
+  "cache_errors": true,
+  "api_authentication_errors": {
+    "bitquery": {
+      "issue": "401 Unauthorized - Wrong authentication method",
+      "fix": "Use ACCESS_TOKEN instead of API_KEY",
+      "implementation": "Update BitQuery authentication to use Bearer token"
+    },
+    "coinmarketcap": {
+      "issue": "401 Unauthorized - Invalid API key",
+      "fix": "Validate and update API key",
+      "implementation": "Add API key validation and fallback"
+    },
+    "santiment": {
+      "issue": "Invalid JSON Web Token (JWT)",
+      "fix": "Regenerate JWT token",
+      "implementation": "Update Santiment authentication"
+    },
+    "breadcrumbs": {
+      "issue": "403 Forbidden",
+      "fix": "Update API endpoint or authentication",
+      "implementation": "Add proper authentication headers"
+    },
+    "debank": {
+      "issue": "403 FORBIDDEN - Insufficient units",
+      "fix": "Handle rate limiting gracefully",
+      "implementation": "Add rate limit handling and fallback"
+    }
+  },
+  "api_rate_limit_errors": {
+    "twitter": {
+      "issue": "429 Rate Limit Exceeded",
+      "fix": "Implement exponential backoff and reduce query frequency",
+      "implementation": "Add rate limit handling with delays"
+    },
+    "telegram": {
+      "issue": "409 Conflict - Multiple bot instances",
+      "fix": "Ensure single bot instance",
+      "implementation": "Add bot instance management"
+    },
+    "debank": {
+      "issue": "Insufficient units",
+      "fix": "Handle gracefully with fallback data",
+      "implementation": "Add fallback mechanism"
+    }
+  },
+  "api_not_found_errors": {
+    "moralis": {
+      "issue": "404 Not Found for /api/v2/erc20/{address}",
+      "fix": "Use correct endpoint with chain parameter",
+      "implementation": "Update Moralis endpoint calls"
+    },
+    "1inch": {
+      "issue": "404 Not Found for /token/v1.0/1/metadata",
+      "fix": "Use correct API version and endpoint",
+      "implementation": "Update 1inch API calls"
+    },
+    "zapper": {
+      "issue": "404 Not Found for /v2/portfolio/{address}",
+      "fix": "Use correct endpoint or handle gracefully",
+      "implementation": "Add endpoint validation"
+    }
+  },
+  "api_timeout_errors": {
+    "etherscan": {
+      "issue": "Read timed out",
+      "fix": "Increase timeout and add retry logic",
+      "implementation": "Update timeout settings and add retries"
+    },
+    "general": {
+      "issue": "Connection timeout",
+      "fix": "Implement proper timeout handling",
+      "implementation": "Add timeout configuration"
+    }
+  },
+  "api_network_errors": {
+    "certik": {
+      "issue": "DNS Resolution - api.certik.com cannot be resolved",
+      "fix": "Use alternative endpoint or handle gracefully",
+      "implementation": "Add DNS resolution handling"
+    },
+    "general": {
+      "issue": "Failed to resolve hostname",
+      "fix": "Add network error handling",
+      "implementation": "Add network error recovery"
+    }
+  },
+  "missing_api_keys": {
+    "scorechain": {
+      "issue": "Scorechain API Key: Missing",
+      "fix": "Use placeholder implementation",
+      "implementation": "Already implemented - placeholder score 5/10"
+    },
+    "trm_labs": {
+      "issue": "TRM Labs API Key: Missing",
+      "fix": "Use placeholder implementation",
+      "implementation": "Already implemented - placeholder score 5/10"
+    },
+    "general": {
+      "issue": "API key missing",
+      "fix": "Add proper error handling for missing keys",
+      "implementation": "Add graceful degradation"
+    }
+  },
+  "contract_verification_errors": {
+    "etherscan": {
+      "issue": "Contract verification unknown: NOTOK",
+      "fix": "Use correct action parameter",
+      "implementation": "Update action from getabi to getsourcecode"
+    },
+    "general": {
+      "issue": "Verification status unknown",
+      "fix": "Handle gracefully with fallback",
+      "implementation": "Add fallback verification logic"
+    }
+  },
+  "holder_data_errors": {
+    "etherscan": {
+      "issue": "Etherscan holder data failed: NOTOK",
+      "fix": "Use correct endpoint and parameters",
+      "implementation": "Update holder data endpoint calls"
+    },
+    "general": {
+      "issue": "Holder data unavailable",
+      "fix": "Add fallback data sources",
+      "implementation": "Add alternative holder data sources"
+    }
+  },
+  "social_api_errors": {
+    "twitter": {
+      "issue": "Twitter API failed - Rate limit",
+      "fix": "Implement rate limiting and backoff",
+      "implementation": "Add exponential backoff and reduced queries"
+    },
+    "telegram": {
+      "issue": "Telegram API failed - Conflict",
+      "fix": "Handle bot instance conflicts",
+      "implementation": "Add bot instance management"
+    },
+    "discord": {
+      "issue": "Discord API failed",
+      "fix": "Add proper error handling",
+      "implementation": "Add Discord API error handling"
+    },
+    "reddit": {
+      "issue": "Reddit API failed",
+      "fix": "Add proper error handling",
+      "implementation": "Add Reddit API error handling"
+    }
+  }
+}

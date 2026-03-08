@@ -1,0 +1,70 @@
+# ── Python venv internals ────────────────────────────────────────────────────
+# The workspace root IS a venv; ignore all venv-generated artefacts.
+bin/
+include/
+lib/
+lib64/
+pyvenv.cfg
+share/
+
+# ── Python artefacts ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# ── Runtime / generated data ─────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+logs/
+*.log
+*.pid
+data/
+api_cache.db
+monitor_cache.py
+cleanup_data_cache.py
+
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.secure_credentials
+.master_key
+*.pem
+*.key
+*.p12
+config/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+*.app
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Misc generated ───────────────────────────────────────────────────────────
+site/
+site_public/
+defi_dashboard_locks/
+~
+
+# ── Keep these tracked ────────────────────────────────────────────────────────
+# (override any broad ignores above)
+!scripts/
+!docs/
+!requirements.txt
+!.github/
+!mkdocs.yml
+!mkdocs.public.yml

@@ -1,0 +1,47 @@
+name: Auto Ready Cursor Draft PRs
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mark-ready:
+    if: github.event.pull_request.draft == true && startsWith(github.event.pull_request.head.ref, 'cursor/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Convert draft PR to ready for review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr || !pr.draft) {
+              core.info("PR is already ready for review.");
+              return;
+            }
+            if (!String(pr.head?.ref || "").startsWith("cursor/")) {
+              core.info(`Skipping non-cursor branch: ${pr.head?.ref || ""}`);
+              return;
+            }
+
+            await github.graphql(
+              `
+              mutation MarkReady($pullRequestId: ID!) {
+                markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+                  pullRequest {
+                    number
+                    isDraft
+                    url
+                  }
+                }
+              }
+              `,
+              { pullRequestId: pr.node_id },
+            );
+
+            core.info(`PR #${pr.number} marked ready for review.`);

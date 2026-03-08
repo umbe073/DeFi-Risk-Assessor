@@ -1,0 +1,11 @@
+[Unit]
+Description=Hodler Suite Script API runtime watchdog
+After=network-online.target hodler-script-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hodler_script_api_watchdog.sh
+User=root
+Group=root
+Nice=10

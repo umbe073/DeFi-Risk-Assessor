@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}FAQ - Hodler Suite{% endblock %}
+{% block content %}
+<h1>FAQ</h1>
+<p>Most common login, subscription, and risk-assessment questions with direct fixes.</p>
+
+<section class="panel-block">
+  <h2>Account and Access</h2>
+  <div class="faq-list">
+    <details>
+      <summary>I cannot log in even with the correct password. What should I check first?</summary>
+      <p>Confirm you are using the correct email account, check for browser auto-fill mistakes, and verify caps-lock is off. If 2FA is enabled, password-only login will not complete until you enter the authenticator code.</p>
+    </details>
+    <details>
+      <summary>My 2FA code is always rejected.</summary>
+      <p>Sync your phone time automatically and retry with a fresh code. TOTP is time-based, so device clock drift is the most common reason for failures.</p>
+    </details>
+    <details>
+      <summary>I created an account but did not receive a confirmation code email.</summary>
+      <p>Use the <strong>Send Confirmation Code</strong> button on the verification page, then check spam/junk. The code expires in 30 minutes. Never share your code with anyone.</p>
+    </details>
+    <details>
+      <summary>How long is my email confirmation code valid?</summary>
+      <p>30 minutes from the moment it is generated. After expiration, request a new code from the same verification page.</p>
+    </details>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Risk Assessment Output</h2>
+  <div class="faq-list">
+    <details>
+      <summary>Why do I see N/A fields in the report?</summary>
+      <p>N/A usually means the upstream data provider did not return that metric for the selected token/chain at request time. Retry after a few minutes; if it persists, open a support ticket with token address and chain ID.</p>
+    </details>
+    <details>
+      <summary>Why are some sections returning 0 results?</summary>
+      <p>Zero values can be legitimate for low-activity tokens, newly deployed contracts, or unavailable historical windows. Cross-check with run timestamp and API health before treating it as a tool failure.</p>
+    </details>
+    <details>
+      <summary>What does "unreachable API" mean in live assessment logs?</summary>
+      <p>At least one provider endpoint timed out, refused connection, or returned an error status. The run continues with partial data when possible, but final confidence may be lower.</p>
+    </details>
+    <details>
+      <summary>I suspect a fake red-flag in the report. What should I do?</summary>
+      <p>Open a ticket and include token address, chain, run UTC timestamp, and the exact flagged section. Our team can replay the run and validate whether the flag is data-noise or a true risk signal.</p>
+    </details>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Billing and Subscriptions</h2>
+  <div class="faq-list">
+    <details>
+      <summary>Do I receive an email when my signup is completed?</summary>
+      <p>Yes. After successful email-code verification, a welcome confirmation email is sent from <code>no_reply@hodler-suite.com</code>.</p>
+    </details>
+    <details>
+      <summary>I paid but my subscription access is not active yet.</summary>
+      <p>Payment and entitlement sync can take a short processing window. If access is still locked after confirmation, send your payment reference and account email via Help Center.</p>
+    </details>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Support</h2>
+  <div class="faq-list">
+    <details>
+      <summary>What should I include in a support ticket for faster resolution?</summary>
+      <p>Provide your account email, exact issue, token address (if relevant), chain/network, UTC timestamp, and screenshots/log excerpts. This significantly reduces triage time.</p>
+    </details>
+    <details>
+      <summary>How do I track my ticket?</summary>
+      <p>Every request receives a unique ID (format: <code>HD-YYYYMMDD-HHMMSSffffff-XXXXXX</code>) in the confirmation message. Include that ID in follow-up communication.</p>
+    </details>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,36 @@
+site_name: Hodler Suite Internal Docs
+site_url: https://docs.hodler-suite.com
+repo_name: Hodler Suite
+docs_dir: docs/Website
+nav:
+  - Overview: index.md
+  - Architecture:
+      - Core Engine & Workflow: architecture.md
+      - Data Fetching & Caching: data-fetching-and-caching.md
+  - Risk Scoring:
+      - Scoring Model & Categories: scoring-model.md
+      - EU Mode vs Global Mode: eu-mode-and-global-mode.md
+      - Social Score System: social-score.md
+  - Market Data:
+      - Token Data Viewer: token-data-viewer.md
+  - Operations:
+      - Running the Assessment: running-and-configuration.md
+      - Outputs & Dashboards: dashboard-and-outputs.md
+      - Web Port Security Plan (2026): web-port-security-implementation-plan-2026.md
+  - Security:
+      - Secure Credentials System: secure-credentials.md
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true

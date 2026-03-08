@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+{% block title %}Billing Reconciliation - Hodler Suite{% endblock %}
+{% block content %}
+<section class="panel-block">
+  <h1>Billing Reconciliation</h1>
+  <p>Cross-check NOWPayments checkout sessions, webhook events, and user subscriptions.</p>
+  <div class="status-summary-grid">
+    <article class="status-summary-card">
+      <small>Sessions checked</small>
+      <strong>{{ summary.sessions_checked or 0 }}</strong>
+      <span>recent rows</span>
+    </article>
+    <article class="status-summary-card">
+      <small>Webhooks checked</small>
+      <strong>{{ summary.webhooks_checked or 0 }}</strong>
+      <span>recent rows</span>
+    </article>
+    <article class="status-summary-card">
+      <small>Subscriptions checked</small>
+      <strong>{{ summary.subscriptions_checked or 0 }}</strong>
+      <span>recent rows</span>
+    </article>
+    <article class="status-summary-card">
+      <small>Detected issues</small>
+      <strong>
+        {{ (summary.finalized_without_subscription or 0)
+          + (summary.orphan_webhooks or 0)
+          + (summary.orphan_subscriptions or 0)
+          + (summary.stale_waiting_sessions or 0) }}
+      </strong>
+      <span>requires review</span>
+    </article>
+    <article class="status-summary-card">
+      <small>Closed false positives</small>
+      <strong>{{ summary.false_positives_closed or 0 }}</strong>
+      <span>hidden from lists</span>
+    </article>
+  </div>
+</section>
+
+<section class="panel-block">
+  <details class="fold-panel" open>
+    <summary>NOWPayments Capability Sync / Override</summary>
+    <div class="fold-panel-body">
+      <p class="inline-note">
+        Sync provider capabilities, then enable/disable which crypto rails are allowed on checkout.
+        Enabled rails: {{ effective_currency_options|length }}.
+      </p>
+      <form method="post" action="{{ url_for('pages.services_status_nowpayments_sync') }}" class="row-actions">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ url_for('pages.billing_reconciliation_page') }}">
+        <button type="submit">Sync NOWPayments Currencies</button>
+      </form>
+      {% if available_nowpayments_currencies %}
+      <p class="inline-note">Provider currently exposes {{ available_nowpayments_currencies|length }} currencies.</p>
+      {% endif %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Label</th>
+              <th>Detected</th>
+              <th>Enabled</th>
+              <th>Updated (UTC)</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in nowpayments_currency_rows %}
+            <tr>
+              <td><code>{{ row.code }}</code></td>
+              <td>{{ row.label }}</td>
+              <td>{{ "yes" if row.is_detected else "no" }}</td>
+              <td>{{ "yes" if row.is_enabled else "no" }}</td>
+              <td>{{ row.updated_at_utc }}</td>
+              <td>
+                <form method="post" action="{{ url_for('pages.services_status_nowpayments_override') }}" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="next" value="{{ url_for('pages.billing_reconciliation_page') }}">
+                  <input type="hidden" name="code" value="{{ row.code }}">
+                  <input type="hidden" name="label" value="{{ row.label }}">
+                  <input type="hidden" name="enabled" value="{{ '0' if row.is_enabled else '1' }}">
+                  <button type="submit">{{ "Disable" if row.is_enabled else "Enable" }}</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6">No capability data yet. Press sync first.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+</section>
+
+<section class="panel-block">
+  <h2>Partial Payment Tracking ({{ report.partial_payment_sessions|length }})</h2>
+  <p class="inline-note">
+    Codes below are generated and tied to the payment session so support can verify user requests for manual completion.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>User</th>
+          <th>Status</th>
+          <th>Total</th>
+          <th>Paid</th>
+          <th>Remaining</th>
+          <th>Support Code</th>
+          <th>Updated (UTC)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.partial_payment_sessions %}
+        <tr>
+          <td><code>{{ row.order_id }}</code></td>
+          <td>{{ row.user_email }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ "%.8f"|format(row.partial_total_amount) }} {{ row.partial_price_currency }}</td>
+          <td>{{ "%.8f"|format(row.partial_paid_amount) }} {{ row.partial_price_currency }}</td>
+          <td>{{ "%.8f"|format(row.partial_remaining_amount) }} {{ row.partial_price_currency }}</td>
+          <td><code>{{ row.manual_support_code or "-" }}</code></td>
+          <td>{{ row.updated_at_utc or row.created_at_utc }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No partial payments detected.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Finalized Sessions Without Subscription ({{ report.finalized_without_subscription|length }})</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>User</th>
+          <th>Plan</th>
+          <th>Status</th>
+          <th>Paid at</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.finalized_without_subscription %}
+        <tr>
+          <td><code>{{ row.order_id }}</code></td>
+          <td>{{ row.user_email }}</td>
+          <td>{{ row.plan_id }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ row.paid_at_utc or "-" }}</td>
+          <td>
+            <form method="post" action="{{ url_for('pages.billing_reconciliation_action') }}" class="row-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ url_for('pages.billing_reconciliation_page') }}">
+              <input type="hidden" name="issue_type" value="finalized_without_subscription">
+              <input type="hidden" name="issue_key" value="{{ row.issue_key }}">
+              <input type="hidden" name="order_id" value="{{ row.order_id }}">
+              <input type="text" name="reason" placeholder="Reason (required)" required>
+              <button type="submit" name="action_type" value="reapply_webhook">Reapply webhook</button>
+              <button type="submit" name="action_type" value="manual_activate_subscription">Manual activate</button>
+              <button type="submit" name="action_type" value="close_false_positive">Close false-positive</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No inconsistency found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Orphan Webhooks ({{ report.orphan_webhooks|length }})</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Event ID</th>
+          <th>Created (UTC)</th>
+          <th>Order ID</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.orphan_webhooks %}
+        <tr>
+          <td><code>{{ row.event_id }}</code></td>
+          <td>{{ row.created_at_utc }}</td>
+          <td><code>{{ row.order_id or "-" }}</code></td>
+          <td>{{ row.payment_status or "-" }}</td>
+          <td>
+            <form method="post" action="{{ url_for('pages.billing_reconciliation_action') }}" class="row-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ url_for('pages.billing_reconciliation_page') }}">
+              <input type="hidden" name="issue_type" value="orphan_webhooks">
+              <input type="hidden" name="issue_key" value="{{ row.issue_key }}">
+              <input type="hidden" name="order_id" value="{{ row.order_id }}">
+              <input type="hidden" name="event_id" value="{{ row.event_id }}">
+              <input type="text" name="reason" placeholder="Reason (required)" required>
+              <button type="submit" name="action_type" value="reapply_webhook">Reapply webhook</button>
+              <button type="submit" name="action_type" value="close_false_positive">Close false-positive</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">No orphan webhook found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Orphan NOWPayments Subscriptions ({{ report.orphan_subscriptions|length }})</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Order ID</th>
+          <th>Plan</th>
+          <th>Status</th>
+          <th>Updated (UTC)</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.orphan_subscriptions %}
+        <tr>
+          <td>{{ row.user_email }}</td>
+          <td><code>{{ row.order_id or "-" }}</code></td>
+          <td>{{ row.plan_id }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ row.updated_at_utc }}</td>
+          <td>
+            <form method="post" action="{{ url_for('pages.billing_reconciliation_action') }}" class="row-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ url_for('pages.billing_reconciliation_page') }}">
+              <input type="hidden" name="issue_type" value="orphan_subscriptions">
+              <input type="hidden" name="issue_key" value="{{ row.issue_key }}">
+              <input type="hidden" name="order_id" value="{{ row.order_id }}">
+              <input type="text" name="reason" placeholder="Reason (required)" required>
+              <button type="submit" name="action_type" value="close_false_positive">Close false-positive</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No orphan subscription found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Stale Pending Sessions ({{ report.stale_waiting_sessions|length }})</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>User</th>
+          <th>Plan</th>
+          <th>Status</th>
+          <th>Created (UTC)</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.stale_waiting_sessions %}
+        <tr>
+          <td><code>{{ row.order_id }}</code></td>
+          <td>{{ row.user_email }}</td>
+          <td>{{ row.plan_id }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ row.created_at_utc }}</td>
+          <td>
+            <form method="post" action="{{ url_for('pages.billing_reconciliation_action') }}" class="row-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ url_for('pages.billing_reconciliation_page') }}">
+              <input type="hidden" name="issue_type" value="stale_waiting_sessions">
+              <input type="hidden" name="issue_key" value="{{ row.issue_key }}">
+              <input type="hidden" name="order_id" value="{{ row.order_id }}">
+              <input type="text" name="reason" placeholder="Reason (required)" required>
+              <button type="submit" name="action_type" value="manual_activate_subscription">Manual activate</button>
+              <button type="submit" name="action_type" value="close_false_positive">Close false-positive</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No stale waiting session found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel-block">
+  <h2>Reconciliation Action Audit (latest {{ reconciliation_actions|length }})</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Created (UTC)</th>
+          <th>Action</th>
+          <th>Issue</th>
+          <th>Order/Event</th>
+          <th>Result</th>
+          <th>Reason</th>
+          <th>Actor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in reconciliation_actions %}
+        <tr>
+          <td>{{ row.created_at_utc }}</td>
+          <td>{{ row.action_type }}</td>
+          <td><code>{{ row.issue_type }} :: {{ row.issue_key }}</code></td>
+          <td>
+            <code>{{ row.order_id or "-" }}</code>
+            /
+            <code>{{ row.event_id or "-" }}</code>
+          </td>
+          <td>{{ row.result_status }}</td>
+          <td>{{ row.reason }}</td>
+          <td>{{ row.actor_email }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No action recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
