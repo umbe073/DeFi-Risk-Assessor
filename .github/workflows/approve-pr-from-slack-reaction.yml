@@ -242,7 +242,13 @@ jobs:
 
               if (isTruthy(process.env.DELETE_BRANCH || "true")) {
                 try {
-                  if (pr.head.ref !== pr.base.ref) {
+                  const isSameRepoBranch = pr.head.repo?.full_name === pr.base.repo?.full_name;
+                  if (!isSameRepoBranch) {
+                    logReason(
+                      "skip_delete_branch",
+                      `PR #${prNumber} head branch "${pr.head.ref}" is from a fork; skip delete in base repo.`,
+                    );
+                  } else if (pr.head.ref !== pr.base.ref) {
                     await github.rest.git.deleteRef({
                       owner,
                       repo,

@@ -98,11 +98,11 @@ jobs:
                 `,
                 { owner, repo, number: pr.number },
               )
-            )?.repository?.pullRequest?.reviewDecision || "";
+            )?.repository?.pullRequest?.reviewDecision;
 
-            const decision = toLower(reviewDecision);
+            const decision = toLower(reviewDecision || reviewState);
             if (!["approved", "changes_requested"].includes(decision)) {
-              core.info(`PR #${pr.number} review decision is not final yet: ${reviewDecision || "unknown"}.`);
+              core.info(`PR #${pr.number} review decision is not final yet: ${reviewDecision || reviewState || "unknown"}.`);
               return;
             }
 
