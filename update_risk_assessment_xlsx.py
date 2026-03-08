@@ -7,6 +7,8 @@ import numpy as np
 import time
 import sys
 import threading
+import subprocess
+import shutil
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 from datetime import datetime
@@ -89,6 +91,29 @@ class ConsoleProgressBar:
 
 # Global progress bar instance
 progress_bar = None
+
+def show_completion_notification(title, body, macos_script=None):
+    """Show an OS-native completion notification when available."""
+    if sys.platform == "darwin" and macos_script and shutil.which("osascript"):
+        try:
+            subprocess.run(['osascript', '-e', macos_script], check=True)
+            return True
+        except Exception:
+            return False
+
+    if sys.platform.startswith("linux") and shutil.which("notify-send"):
+        try:
+            subprocess.run(
+                ['notify-send', title, body],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except Exception:
+            return False
+
+    return False
 
 def launch_progress_bar():
     """Initialize the console progress bar"""
@@ -336,12 +361,10 @@ def main():
     import time
     time.sleep(3)  # Wait for the webpage to close
 
-    # Show completion dialog with disclaimer (after webpage closes)
-    try:
-        import subprocess
-        completion_script = f'''
-        tell application "System Events"
-            display dialog "✅ Update Completed!
+    # Show completion notification with platform-aware fallback.
+    completion_script = f'''
+    tell application "System Events"
+        display dialog "✅ Update Completed!
 
 📊 Risk assessment has been completed successfully!
 
@@ -356,11 +379,18 @@ def main():
 This tool provides automated risk assessment based on available data and should be used as part of a comprehensive due diligence process. Results are for informational purposes only and do not constitute financial advice. Always conduct your own research and consult with qualified professionals before making investment decisions.
 
 Market data provided by CoinGecko (https://www.coingecko.com)" with title "DeFi Risk Assessment - Complete" buttons {{"OK"}} default button "OK"
-        end tell
-        '''
-        subprocess.run(['osascript', '-e', completion_script], check=True)
-    except Exception as e:
-        print(f"Could not show completion dialog: {e}")
+    end tell
+    '''
+    notification_body = (
+        f"Excel update completed.\n"
+        f"Results: {xlsx_file}, {json_file}"
+    )
+    notification_shown = show_completion_notification(
+        "DeFi Risk Assessment - Complete",
+        notification_body,
+        macos_script=completion_script,
+    )
+    if not notification_shown:
         print("✅ Risk assessment completed successfully!")
         print(f"📊 Check the 'data/' directory for results")
         print(f"📝 Check the 'logs/' directory for detailed logs")

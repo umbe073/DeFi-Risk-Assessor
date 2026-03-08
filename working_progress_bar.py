@@ -13,6 +13,7 @@ from typing import Optional
 import shutil
 import glob
 import base64
+import webbrowser
 
 class WorkingProgressBar:
     """
@@ -60,6 +61,30 @@ class WorkingProgressBar:
             except Exception:
                 data_urls.append("")
         return data_urls
+
+    def _open_progress_page(self):
+        """Open progress page in the default browser across platforms."""
+        # Prefer native opener commands when available.
+        platform_openers = []
+        if sys.platform == "darwin":
+            platform_openers = ["open"]
+        elif sys.platform.startswith("linux"):
+            platform_openers = ["xdg-open"]
+
+        for opener in platform_openers:
+            if shutil.which(opener):
+                subprocess.Popen(
+                    [opener, self.html_file],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+
+        # Fall back to Python browser launcher. This can still return False in headless environments.
+        try:
+            return bool(webbrowser.open(f"file://{self.html_file}"))
+        except Exception:
+            return False
 
     def _create_progress_window(self):
         """Create a working progress bar using a simple GUI"""
@@ -193,9 +218,10 @@ class WorkingProgressBar:
             shutil.move(self.html_temp, self.html_file)
             
             # Open the HTML file in a browser
-            subprocess.Popen(['open', self.html_file], 
-                           stdout=subprocess.DEVNULL, 
-                           stderr=subprocess.DEVNULL)
+            opened = self._open_progress_page()
+            if not opened:
+                with open("/tmp/progress_bar_error.log", "a") as logf:
+                    logf.write(f"[CREATE] {time.ctime()}: Could not launch browser for progress page\n")
             
             self.is_running = True
             # Removed the initialization message

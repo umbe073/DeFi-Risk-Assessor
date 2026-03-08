@@ -20,6 +20,7 @@ import hashlib
 import shelve
 from diskcache import Cache
 import threading
+import shutil
 
 # Base paths (script is launched from repository root via run_risk_assessment.sh)
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -95,6 +96,31 @@ logging.info(COINGECKO_ATTRIBUTION)
 
 # Load environment variables from .env file
 load_dotenv()
+
+def show_completion_notification(title, body, macos_script=None):
+    """Show an OS-native completion notification when available."""
+    if sys.platform == "darwin" and macos_script and shutil.which("osascript"):
+        try:
+            subprocess.run(['osascript', '-e', macos_script], check=True)
+            return True
+        except Exception as exc:
+            logging.warning(f"Could not show macOS completion dialog: {exc}")
+            return False
+
+    if sys.platform.startswith("linux") and shutil.which("notify-send"):
+        try:
+            subprocess.run(
+                ['notify-send', title, body],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except Exception as exc:
+            logging.warning(f"Could not show Linux completion notification: {exc}")
+            return False
+
+    return False
 
 # --- Automated fallback update ---
 def fetch_and_update_fallbacks():
@@ -4654,12 +4680,10 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
     import time
     time.sleep(4)  # Wait for progress bar countdown to complete
     
-    # Show completion dialog with disclaimer
-    try:
-        import subprocess
-        completion_script = f'''
-        tell application "System Events"
-            display dialog "✅ Update Completed!
+    # Show completion notification with platform-aware fallback.
+    completion_script = f'''
+    tell application "System Events"
+        display dialog "✅ Update Completed!
 
 📊 Risk assessment has been completed successfully!
 
@@ -4674,11 +4698,18 @@ def process_token_batch(input_file="tokens.csv", output_file="risk_report.csv", 
 This tool provides automated risk assessment based on available data and should be used as part of a comprehensive due diligence process. Results are for informational purposes only and do not constitute financial advice. Always conduct your own research and consult with qualified professionals before making investment decisions.
 
 Market data provided by CoinGecko (https://www.coingecko.com)" with title "DeFi Risk Assessment - Complete" buttons {{"OK"}} default button "OK" with icon note
-        end tell
-        '''
-        subprocess.run(['osascript', '-e', completion_script], check=True)
-    except Exception as e:
-        print(f"Could not show completion dialog: {e}")
+    end tell
+    '''
+    notification_body = (
+        f"Risk assessment completed.\n"
+        f"Results: {output_file}, {json_output_file}, {SUMMARY_TXT}"
+    )
+    notification_shown = show_completion_notification(
+        "DeFi Risk Assessment - Complete",
+        notification_body,
+        macos_script=completion_script,
+    )
+    if not notification_shown:
         print("✅ Risk assessment completed successfully!")
         print(f"📊 Check the 'data/' directory for results")
         print(f"📝 Check the 'logs/' directory for detailed logs")
