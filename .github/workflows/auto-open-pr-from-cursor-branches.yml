@@ -51,6 +51,8 @@ jobs:
               "",
               `- Source branch: \`${head}\``,
               `- Base branch: \`${base}\``,
+              "",
+              "Manual GitHub review and merge required after checks complete.",
             ].join("\n");
             try {
               await github.rest.pulls.create({
