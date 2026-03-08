@@ -1,4 +1,4 @@
-name: Slack PR Ready For Approval
+name: Slack PR Ready For Manual Review
 
 on:
   check_suite:
@@ -169,7 +169,7 @@ jobs:
 
             const payload = {
               text: [
-                "A PR is ready to be approved (after CodeQL and Bugbot finish their work). Please check the request for changes:",
+                "A PR is ready for manual review (CodeQL and Bugbot checks completed). Please review the request for changes:",
                 "",
                 `*PR:* <${pr.html_url}|#${pr.number} ${sanitizeUntrusted(pr.title)}>`,
                 `*Branch:* \`${sanitizeUntrusted(pr.head.ref)}\` → \`${sanitizeUntrusted(pr.base.ref)}\``,
@@ -191,7 +191,7 @@ jobs:
                 "*Actions taken by Bugbot (if any):*",
                 ...(bugbotLines.length > 0 ? bugbotLines : ["- No Bugbot actions found."]),
                 "",
-                "Please react with ✅ to approve, merge the branch and delete it afterwards, or with ⛔️ to close the pull request.",
+                "Please review on GitHub and approve/merge manually when appropriate.",
               ].join("\n"),
             };
 
