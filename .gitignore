@@ -60,11 +60,13 @@ site_public/
 defi_dashboard_locks/
 ~
 
-# ── Keep these tracked ────────────────────────────────────────────────────────
-# (override any broad ignores above)
-!scripts/
-!docs/
-!requirements.txt
-!.github/
-!mkdocs.yml
-!mkdocs.public.yml
+# ── Snapshot / backup copies (contain live DBs and runtime data) ─────────────
+# Timestamped full-copy snapshots of the portal should never be committed.
+/docs/Website/web_portal_full_copy_*/
+/docs/Website_public/web_portal_full_copy_*/
+
+# ── Binary / large media ──────────────────────────────────────────────────────
+*.mp4
+*.mov
+*.avi
+*.mkv
