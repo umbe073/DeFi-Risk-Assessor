@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 jobs:
@@ -20,6 +21,65 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const head = context.ref.replace("refs/heads/", "");
+            const reviewerLogin = "degen-hodler";
+
+            const ensureReviewerAndMention = async (pullNumber) => {
+              let reviewerRequested = false;
+              try {
+                await github.rest.pulls.requestReviewers({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                  reviewers: [reviewerLogin],
+                });
+                reviewerRequested = true;
+                core.info(`Requested reviewer @${reviewerLogin} on PR #${pullNumber}.`);
+              } catch (error) {
+                const message = String(error?.message || error?.response?.data?.message || "");
+                const normalized = message.toLowerCase();
+                if (
+                  error?.status === 422 ||
+                  error?.status === 403 ||
+                  normalized.includes("could not request reviews")
+                ) {
+                  core.warning(
+                    `Could not request reviewer @${reviewerLogin} on PR #${pullNumber}: ${message}`,
+                  );
+                } else {
+                  throw error;
+                }
+              }
+
+              try {
+                const comments = (
+                  await github.rest.issues.listComments({
+                    owner,
+                    repo,
+                    issue_number: pullNumber,
+                    per_page: 100,
+                  })
+                ).data || [];
+                const mentionToken = `@${reviewerLogin}`;
+                const hasMention = comments.some((item) =>
+                  String(item?.body || "").includes(mentionToken),
+                );
+                if (!hasMention || !reviewerRequested) {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: pullNumber,
+                    body: `${mentionToken} manual review requested once required checks complete.`,
+                  });
+                  core.info(`Posted reviewer mention for @${reviewerLogin} on PR #${pullNumber}.`);
+                }
+              } catch (error) {
+                core.warning(
+                  `Unable to post reviewer mention comment on PR #${pullNumber}: ${String(
+                    error?.message || error,
+                  )}`,
+                );
+              }
+            };
 
             if (!head.startsWith("cursor/")) {
               core.info(`Ignoring non-cursor branch: ${head}`);
@@ -39,7 +99,11 @@ jobs:
             });
 
             if (existing.data.length > 0) {
-              core.info(`PR already open: #${existing.data[0].number}`);
+              const existingNumber = Number(existing.data[0].number || 0);
+              core.info(`PR already open: #${existingNumber}`);
+              if (existingNumber > 0) {
+                await ensureReviewerAndMention(existingNumber);
+              }
               return;
             }
 
@@ -66,3 +130,4 @@ jobs:
             });
 
             core.info(`Created PR #${created.data.number}: ${created.data.html_url}`);
+            await ensureReviewerAndMention(Number(created.data.number || 0));
