@@ -5154,7 +5154,7 @@ def fetch_1inch_quote(from_token_address, to_token_address, amount, chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, params=params, headers=headers)
+        response = requests.get(url, params=params, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5175,6 +5175,7 @@ if __name__ == "__main__":
 # --- 1inch API Integration ---
 
 ONEINCH_BASE = "https://api.1inch.dev"
+ONEINCH_TIMEOUT_SECONDS = 20
 
 # 1. Token Metadata
 
@@ -5190,7 +5191,7 @@ def fetch_1inch_token_metadata(token_address, chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         tokens = response.json().get("tokens", {})
         return tokens.get(token_address.lower())
@@ -5212,7 +5213,7 @@ def fetch_1inch_spot_price(token_address, chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5237,7 +5238,7 @@ def fetch_1inch_quote(from_token_address, to_token_address, amount, chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, params=params, headers=headers)
+        response = requests.get(url, params=params, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5265,7 +5266,7 @@ def fetch_1inch_swap(from_token_address, to_token_address, amount, wallet_addres
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, params=params, headers=headers)
+        response = requests.get(url, params=params, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5286,7 +5287,7 @@ def fetch_1inch_balances(wallet_address, chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5307,7 +5308,7 @@ def fetch_1inch_gas_price(chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5328,7 +5329,7 @@ def fetch_1inch_orderbook(chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5349,7 +5350,7 @@ def fetch_1inch_portfolio(wallet_address, chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -5370,7 +5371,7 @@ def fetch_1inch_history(wallet_address, chain_id=1):
         "Authorization": f"Bearer {api_key}"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=ONEINCH_TIMEOUT_SECONDS)
         response.raise_for_status()
         return response.json()
     except Exception as e:
