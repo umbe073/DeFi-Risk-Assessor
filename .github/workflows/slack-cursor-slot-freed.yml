@@ -1,0 +1,66 @@
+name: Slack Cursor Slot Freed
+
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    if: startsWith(github.event.pull_request.head.ref, 'cursor/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack about slot release
+        uses: actions/github-script@v7
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.payload.pull_request;
+            const webhook = String(process.env.SLACK_WEBHOOK_URL || "").trim();
+
+            if (!webhook || !pr) {
+              core.info("No webhook or no PR payload; skipping.");
+              return;
+            }
+
+            const base = String(pr.base?.ref || "main");
+            const openPulls = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              base,
+              per_page: 100,
+            });
+            const openCursorPrs = openPulls.filter((p) => String(p.head?.ref || "").startsWith("cursor/"));
+            const remaining = openCursorPrs.length;
+
+            const status = pr.merged ? ":white_check_mark: MERGED" : ":no_entry: CLOSED";
+            const lines = [
+              `${status} | *#${pr.number}* <${pr.html_url}|${pr.title}>`,
+              `Branch: \`${String(pr.head?.ref || "")}\` -> \`${base}\``,
+              `Remaining open Cursor PRs: *${remaining}*`,
+            ];
+
+            if (remaining > 0) {
+              lines.push("⏳ Queue still active. Next report should wait until current review pipeline frees up.");
+            } else {
+              lines.push("✅ Queue is clear. Next bug report can be processed immediately.");
+            }
+
+            const response = await fetch(webhook, {
+              method: "POST",
+              headers: { "Content-Type": "application/json; charset=utf-8" },
+              body: JSON.stringify({ text: lines.join("\n"), mrkdwn: true }),
+            });
+
+            if (!response.ok) {
+              const raw = await response.text();
+              core.warning(`Slack webhook failed: HTTP ${response.status} ${raw}`);
+            }
