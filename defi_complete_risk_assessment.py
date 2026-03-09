@@ -5075,20 +5075,24 @@ class ConsoleProgressBar:
             if now - self.last_update < self.update_interval and self.completed < self.total_items:
                 return  # Skip update if too soon and not final
             self.last_update = now
-            
-            percent = int((self.completed / self.total_items) * 100)
-            elapsed = now - self.start_time
-            
-            # Calculate ETA
-            if self.completed > 0:
-                eta = (elapsed / self.completed) * (self.total_items - self.completed)
-                eta_str = f"ETA: {eta:.1f}s"
-            else:
-                eta_str = "ETA: --"
-            
-            # Create progress bar
+
+            # Avoid divide-by-zero when there are no tokens to process.
             bar_length = 30
-            filled_length = int(bar_length * self.completed // self.total_items)
+            if self.total_items <= 0:
+                percent = 100
+                eta_str = "ETA: 0.0s"
+                filled_length = bar_length
+            else:
+                percent = int((self.completed / self.total_items) * 100)
+                elapsed = now - self.start_time
+                # Calculate ETA
+                if self.completed > 0:
+                    eta = (elapsed / self.completed) * (self.total_items - self.completed)
+                    eta_str = f"ETA: {eta:.1f}s"
+                else:
+                    eta_str = "ETA: --"
+                # Create progress bar
+                filled_length = int(bar_length * self.completed // self.total_items)
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
             
             # Clear line and print progress

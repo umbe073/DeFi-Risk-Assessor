@@ -60,20 +60,24 @@ class ConsoleProgressBar:
             if now - self.last_update < self.update_interval and self.completed < self.total_items:
                 return  # Skip update if too soon and not final
             self.last_update = now
-            
-            percent = int((self.completed / self.total_items) * 100)
-            elapsed = now - self.start_time
-            
-            # Calculate ETA
-            if self.completed > 0:
-                eta = (elapsed / self.completed) * (self.total_items - self.completed)
-                eta_str = f"ETA: {eta:.1f}s"
-            else:
-                eta_str = "ETA: --"
-            
-            # Create progress bar
+
+            # Handle empty workloads gracefully (e.g. empty risk_report.json).
             bar_length = 30
-            filled_length = int(bar_length * self.completed // self.total_items)
+            if self.total_items <= 0:
+                percent = 100
+                eta_str = "ETA: 0.0s"
+                filled_length = bar_length
+            else:
+                percent = int((self.completed / self.total_items) * 100)
+                elapsed = now - self.start_time
+                # Calculate ETA
+                if self.completed > 0:
+                    eta = (elapsed / self.completed) * (self.total_items - self.completed)
+                    eta_str = f"ETA: {eta:.1f}s"
+                else:
+                    eta_str = "ETA: --"
+                # Create progress bar
+                filled_length = int(bar_length * self.completed // self.total_items)
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
             
             # Clear line and print progress
@@ -93,14 +97,14 @@ progress_bar = None
 def launch_progress_bar():
     """Initialize the console progress bar"""
     global progress_bar
-    # This will be set in main function
-    pass
+    progress_bar = ConsoleProgressBar(1, "Updating Excel report")
 
 def update_progress_bar(percent, message):
     """Update the console progress bar"""
     global progress_bar
     if progress_bar:
-        completed = int((percent / 100) * progress_bar.total_items)
+        total_items = max(progress_bar.total_items, 1)
+        completed = int((percent / 100) * total_items)
         progress_bar.update(completed, message)
 
 def close_progress_bar():
@@ -116,34 +120,35 @@ def main():
     # Load the spreadsheet
     df = pd.read_excel(xlsx_file)
     # Load the JSON report
-    data = json.load(open(json_file))
+    with open(json_file) as report_file:
+        raw_data = json.load(report_file)
+    if isinstance(raw_data, list):
+        data = raw_data
+    elif isinstance(raw_data, dict):
+        data = [raw_data]
+    else:
+        data = []
 
     # Show 'Generating final reports...' in the web progress bar
     update_progress_phase(2, "Generating final reports...")
 
-    # Ensure 'Symbol' column exists after 'Token Address'
-    if 'Symbol' not in df.columns:
-        addr_idx = df.columns.get_loc('Token Address')
-        cols = list(df.columns)
-        cols.insert(addr_idx + 1, 'Symbol')
-        df['Symbol'] = ''
-        df = df[cols]
-    
-    # Ensure 'Is Stablecoin' column exists after 'Symbol'
-    if 'Is Stablecoin' not in df.columns:
-        symbol_idx = df.columns.get_loc('Symbol')
-        cols = list(df.columns)
-        cols.insert(symbol_idx + 1, 'Is Stablecoin')
-        df['Is Stablecoin'] = ''
-        df = df[cols]
-    
-    # Ensure 'EU Compliance Status' column exists after 'Is Stablecoin'
-    if 'EU Compliance Status' not in df.columns:
-        stablecoin_idx = df.columns.get_loc('Is Stablecoin')
-        cols = list(df.columns)
-        cols.insert(stablecoin_idx + 1, 'EU Compliance Status')
-        df['EU Compliance Status'] = ''
-        df = df[cols]
+    def ensure_column(dataframe, column_name, insert_after=None, default_value=''):
+        """Insert a missing column in a deterministic location."""
+        if column_name in dataframe.columns:
+            return dataframe
+        cols = list(dataframe.columns)
+        insert_idx = len(cols)
+        if insert_after and insert_after in cols:
+            insert_idx = cols.index(insert_after) + 1
+        cols.insert(insert_idx, column_name)
+        dataframe[column_name] = default_value
+        return dataframe[cols]
+
+    # Ensure core columns exist in the expected order.
+    df = ensure_column(df, 'Token Address', insert_after='Token Name')
+    df = ensure_column(df, 'Symbol', insert_after='Token Address')
+    df = ensure_column(df, 'Is Stablecoin', insert_after='Symbol')
+    df = ensure_column(df, 'EU Compliance Status', insert_after='Is Stablecoin')
 
     # Ensure all red flag columns exist and are ordered together in the middle
     # Find the index after which to insert red flag columns (after 'EU Compliance Status')
@@ -175,32 +180,47 @@ def main():
 
     # Helper: get row index by token address
     def find_row(token_addr):
-        matches = df.index[df['Token Address'].str.lower() == token_addr.lower()].tolist()
+        token_column = df.get('Token Address')
+        if token_column is None:
+            return None
+        normalized_addresses = token_column.fillna('').astype(str).str.lower()
+        matches = df.index[normalized_addresses == token_addr.lower()].tolist()
         return matches[0] if matches else None
 
     # At the start of main execution (before updating Excel)
     launch_progress_bar()
+    progress_bar.total_items = len(data)
 
-    for entry in data:
-        token_addr = entry['token'].lower()
+    for idx, entry in enumerate(data):
+        if not isinstance(entry, dict):
+            update_progress_bar(((idx + 1) / max(len(data), 1)) * 100, f"Skipping invalid entry {idx + 1}")
+            continue
+        token_value = str(entry.get('token', '')).strip()
+        if not token_value:
+            update_progress_bar(((idx + 1) / max(len(data), 1)) * 100, f"Skipping entry {idx + 1} (missing token)")
+            continue
+
+        token_addr = token_value.lower()
         # Get symbol and name from CMC_MAP if available
         symbol = CMC_MAP.get(token_addr, {}).get('symbol', entry.get('symbol', ''))
         token_name = CMC_MAP.get(token_addr, {}).get('name', symbol or token_addr)
         row_idx = find_row(token_addr)
+        key_metrics = entry.get('key_metrics') if isinstance(entry.get('key_metrics'), dict) else {}
+        component_scores = entry.get('component_scores') if isinstance(entry.get('component_scores'), dict) else {}
         # Prepare update dict
         update = {
             'Token Name': token_name,
-            'Token Address': entry['token'],
+            'Token Address': token_value,
             'Symbol': symbol,
             'Is Stablecoin': 'Yes' if entry.get('is_stablecoin', False) else 'No',
             'EU Compliance Status': entry.get('eu_compliance_status', 'Unknown'),
-            'Chain': entry['chain'],
-            'Risk Score': entry['risk_score'],
-            'Risk Category': entry['risk_category'],
-            'Market Cap': entry['key_metrics']['market_cap'],
-            'Volume 24h': entry['key_metrics']['volume_24h'],
-            'Holders': entry['key_metrics']['holders'],
-            'Liquidity': entry['key_metrics']['liquidity'],
+            'Chain': entry.get('chain', ''),
+            'Risk Score': entry.get('risk_score', 0),
+            'Risk Category': entry.get('risk_category', 'Unknown'),
+            'Market Cap': key_metrics.get('market_cap', 0),
+            'Volume 24h': key_metrics.get('volume_24h', 0),
+            'Holders': key_metrics.get('holders', 0),
+            'Liquidity': key_metrics.get('liquidity', 0),
         }
         # Red flags as columns (ensure accuracy)
         red_flags_list = entry.get('red_flags', [])
@@ -226,7 +246,7 @@ def main():
             col = comp.replace('_', ' ').title()
             if comp == 'esg_impact':
                 col = 'Esg Impact'
-            update[col] = entry['component_scores'].get(comp, '')
+            update[col] = component_scores.get(comp, '')
         # Update or append
         if row_idx is not None:
             for k, v in update.items():
@@ -248,6 +268,11 @@ def main():
             # Append as new row, filling all columns
             row = {col: update.get(col, '') for col in df.columns}
             df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+
+        update_progress_bar(
+            ((idx + 1) / max(len(data), 1)) * 100,
+            f"Processed {idx + 1}/{len(data)} token entries"
+        )
 
     # Remove any rows with NaN Token Name (these are extra rows)
     df = df.dropna(subset=['Token Name'])
@@ -328,6 +353,7 @@ def main():
     wb.save(xlsx_file)
 
     # At the end of the script (after all processing is done)
+    close_progress_bar()
     if working_progress_bar:
         working_progress_bar.completed_phases = working_progress_bar.total_phases
     finish_progress_bar("Risk Assessment Completed!")
