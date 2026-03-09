@@ -195,7 +195,7 @@ def main():
         if not isinstance(entry, dict):
             update_progress_bar(((idx + 1) / max(len(data), 1)) * 100, f"Skipping invalid entry {idx + 1}")
             continue
-        token_value = str(entry.get('token', '')).strip()
+        token_value = str(entry.get('token') or '').strip()
         if not token_value:
             update_progress_bar(((idx + 1) / max(len(data), 1)) * 100, f"Skipping entry {idx + 1} (missing token)")
             continue
