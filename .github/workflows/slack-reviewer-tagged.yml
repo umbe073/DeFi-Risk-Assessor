@@ -4,14 +4,10 @@ on:
   pull_request:
     types:
       - review_requested
-  issue_comment:
-    types:
-      - created
 
 permissions:
   contents: read
   pull-requests: read
-  issues: read
 
 jobs:
   notify:
@@ -33,44 +29,19 @@ jobs:
 
             const target = String(process.env.TARGET_REVIEWER || "degen-hodler").trim().toLowerCase();
             const displayName = String(process.env.DISPLAY_NAME || "Hodler Suite Administrator").trim();
-            const eventName = context.eventName;
-
             let shouldNotify = false;
             let prNumber = 0;
             let prUrl = "";
             let prTitle = "";
             let actor = "";
-            let reason = "";
-
-            if (eventName === "pull_request") {
-              const requested = String(context.payload.requested_reviewer?.login || "").trim().toLowerCase();
-              if (requested === target) {
-                shouldNotify = true;
-                const pr = context.payload.pull_request || {};
-                prNumber = Number(pr.number || 0);
-                prUrl = String(pr.html_url || "");
-                prTitle = String(pr.title || "");
-                actor = String(context.payload.sender?.login || "unknown");
-                reason = "review request";
-              }
-            } else if (eventName === "issue_comment") {
-              const issue = context.payload.issue || {};
-              if (!issue.pull_request) {
-                core.info("Comment is not on a pull request; skipping.");
-                return;
-              }
-              const body = String(context.payload.comment?.body || "");
-              const mentionToken = `@${target}`;
-              if (body.toLowerCase().includes(mentionToken)) {
-                shouldNotify = true;
-                prNumber = Number(issue.number || 0);
-                actor = String(context.payload.sender?.login || "unknown");
-                reason = "mention";
-                const { owner, repo } = context.repo;
-                const pr = (await github.rest.pulls.get({ owner, repo, pull_number: prNumber })).data;
-                prUrl = String(pr.html_url || "");
-                prTitle = String(pr.title || "");
-              }
+            const requested = String(context.payload.requested_reviewer?.login || "").trim().toLowerCase();
+            if (requested === target) {
+              shouldNotify = true;
+              const pr = context.payload.pull_request || {};
+              prNumber = Number(pr.number || 0);
+              prUrl = String(pr.html_url || "");
+              prTitle = String(pr.title || "");
+              actor = String(context.payload.sender?.login || "unknown");
             }
 
             if (!shouldNotify || prNumber <= 0 || !prUrl) {
@@ -84,7 +55,7 @@ jobs:
                 `${displayName} has been tagged for code review.`,
                 "",
                 `*PR:* <${prUrl}|#${prNumber} ${prTitle || "untitled"}>`,
-                `*Triggered by:* \`${actor || "unknown"}\` (${reason})`,
+                `*Triggered by:* \`${actor || "unknown"}\` (review request)`,
                 "Please review from the dedicated review account, then approve and merge from the main account.",
               ].join("\n"),
             };
