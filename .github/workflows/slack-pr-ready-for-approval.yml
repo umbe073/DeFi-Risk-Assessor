@@ -105,10 +105,6 @@ jobs:
               core.info(`PR #${pr.number} has no CodeQL checks yet.`);
               return;
             }
-            if (bugbotRuns.length === 0) {
-              core.info(`PR #${pr.number} has no Bugbot checks yet.`);
-              return;
-            }
 
             const scanGood = codeqlRuns.filter((r) => toLower(r.conclusion) === "success").length;
             const scanNeutral = codeqlRuns.filter((r) => ["neutral", "skipped"].includes(toLower(r.conclusion))).length;
@@ -148,7 +144,7 @@ jobs:
 
             const payload = {
               text: [
-                "A PR is ready for manual review (CodeQL and Bugbot checks completed). Please review the request for changes:",
+                "A PR is ready for manual review (required checks completed). Please review the request for changes:",
                 ...(hasInterimSignal
                   ? [
                       "",
