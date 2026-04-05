@@ -241,7 +241,8 @@ class WorkingProgressBar:
         with self.lock:
             if not self.is_running or self.finished:
                 return
-                
+            reached_completion = False
+
             # Only increment if we haven't completed all phases for this token
             if self.completed_phases < self.total_phases:
                 self.completed_phases += 1
@@ -251,8 +252,7 @@ class WorkingProgressBar:
                 if self.completed_phases >= self.total_phases:
                     self.completed_phases = self.total_phases
                     self.current_phase = self.phases_per_token - 1
-                    # Mark as completed to prevent further updates
-                    self.is_running = False
+                    reached_completion = True
             
             if message:
                 self.current_message = message
@@ -260,6 +260,9 @@ class WorkingProgressBar:
                 self.current_message = self.token_phases[self.current_phase]
             
             self._update_progress_bar()
+            if reached_completion:
+                # Stop updates only after writing the final completion frame.
+                self.is_running = False
     
     def _update_progress_bar(self):
         """Update the progress bar display"""
@@ -269,10 +272,7 @@ class WorkingProgressBar:
         try:
             # Calculate percentage (ensure it never exceeds 100%)
             percentage = min((self.completed_phases / self.total_phases) * 100 if self.total_phases > 0 else 0, 100.0)
-            
-            # Add a unique timestamp to force browser refresh
-            timestamp = int(time.time() * 1000)
-            
+
             # Only add meta refresh if not finished
             meta_refresh = '<meta http-equiv="refresh" content="1">' if self.completed_phases < self.total_phases else ''
             # If finished, add the countdown/auto-close JS
@@ -395,12 +395,6 @@ class WorkingProgressBar:
                     <div class="details">Token {self.current_token}/{self.total_tokens} - Phase {min(self.current_phase + 1, 3)}/3</div>
                     {countdown_html}
                 </div>
-                <script>
-                    // Force immediate refresh with timestamp
-                    if (window.location.search !== '?t={timestamp}') {{
-                        window.location.search = '?t={timestamp}';
-                    }}
-                </script>
             </body>
             </html>
             """
@@ -534,25 +528,20 @@ class WorkingProgressBar:
                         <div class="countdown" id="countdown">This page will be closed in 10 seconds...</div>
                     </div>
                     <script>
-                        // Force a final reload if not already in ?final=1
-                        if (!window.location.search.includes('final=1')) {{
-                            window.location.search = '?final=1';
-                        }} else {{
-                            var countdown = 10;
-                            var countdownElement = document.getElementById('countdown');
-                            var timer = setInterval(function() {{
-                                countdown--;
-                                if (countdown > 0) {{
-                                    countdownElement.textContent = `This page will be closed in ${{countdown}} seconds...`;
-                                }} else {{
-                                    countdownElement.textContent = 'Closing Now...';
-                                    clearInterval(timer);
-                                    setTimeout(function() {{
-                                        window.close();
-                                    }}, 1000);
-                                }}
-                            }}, 1000);
-                        }}
+                        var countdown = 10;
+                        var countdownElement = document.getElementById('countdown');
+                        var timer = setInterval(function() {{
+                            countdown--;
+                            if (countdown > 0) {{
+                                countdownElement.textContent = `This page will be closed in ${{countdown}} seconds...`;
+                            }} else {{
+                                countdownElement.textContent = 'Closing Now...';
+                                clearInterval(timer);
+                                setTimeout(function() {{
+                                    window.close();
+                                }}, 1000);
+                            }}
+                        }}, 1000);
                     </script>
                 </body>
                 </html>
