@@ -290,7 +290,7 @@ class WorkingProgressBar:
                     var timer = setInterval(function() {
                         countdown--;
                         if (countdown > 0) {
-                            countdownElement.textContent = `This page will be closed in ${{countdown}} seconds...`;
+                            countdownElement.textContent = `This page will be closed in ${countdown} seconds...`;
                         } else {
                             countdownElement.textContent = 'Closing Now...';
                             clearInterval(timer);
