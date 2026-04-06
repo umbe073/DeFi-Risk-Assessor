@@ -30,6 +30,7 @@ class WorkingProgressBar:
     def __init__(self, total_tokens: int, title: str = "DeFi Risk Assessment"):
         self.total_tokens = total_tokens
         self.title = title
+        self.logo_dir = "/tmp"
         self.current_token = 0
         self.current_phase = 0
         self.phases_per_token = 3  # Data fetching, Analysis, Finalizing
@@ -77,6 +78,7 @@ class WorkingProgressBar:
                 os.path.abspath(os.path.join(script_dir, "..", "docs", "Logos")),
             ]
             logo_dir = next((path for path in logo_dir_candidates if os.path.isdir(path)), logo_dir_candidates[0])
+            self.logo_dir = logo_dir
             for logo_name, _, _ in self.LOGO_FILES:
                 src = os.path.join(logo_dir, logo_name)
                 dst = os.path.join('/tmp', logo_name)
@@ -300,7 +302,7 @@ class WorkingProgressBar:
                     }, 1000);
                 </script>
                 '''
-            logo_data_urls = self._get_logo_data_urls()
+            logo_data_urls = self._get_logo_data_urls(logo_dir=self.logo_dir)
             html_content = f"""
             <!DOCTYPE html>
             <html>
@@ -422,7 +424,7 @@ class WorkingProgressBar:
         with self.lock:
             self.finished = True
             try:
-                logo_data_urls = self._get_logo_data_urls()
+                logo_data_urls = self._get_logo_data_urls(logo_dir=self.logo_dir)
                 html_content = f"""
                 <!DOCTYPE html>
                 <html>
