@@ -45,6 +45,8 @@ if sys.platform == "darwin":
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import json
+import hashlib
+import hmac
 import subprocess
 import threading
 import time
@@ -93,6 +95,33 @@ except ImportError:
 # Project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
+except Exception:
+    pass
+
+WEBHOOK_BASE_URL = str(os.getenv('WEBHOOK_BASE_URL', 'http://localhost:5001')).strip().rstrip('/')
+WEBHOOK_SHARED_SECRET = str(os.getenv('WEBHOOK_SHARED_SECRET', '')).strip()
+
+
+def _webhook_headers(payload_bytes: bytes = b'', *, include_signature: bool = False) -> dict[str, str]:
+    headers: dict[str, str] = {'Accept': 'application/json'}
+    if not WEBHOOK_SHARED_SECRET:
+        return headers
+
+    headers['Authorization'] = f'Bearer {WEBHOOK_SHARED_SECRET}'
+    if include_signature:
+        timestamp = str(int(time.time()))
+        signed_payload = f'{timestamp}.'.encode('utf-8') + (payload_bytes or b'')
+        signature = hmac.new(
+            WEBHOOK_SHARED_SECRET.encode('utf-8'),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        headers['X-Webhook-Timestamp'] = timestamp
+        headers['X-Webhook-Signature'] = f'sha256={signature}'
+    return headers
 
 class DeFiDashboard:
     def __init__(self):
@@ -333,12 +362,14 @@ class DeFiDashboard:
         self.data_columns = (
             'Token', 'Symbol', 'Chain', 'Market Cap', 'Volume 24h', 'Holders', 'Liquidity'
         )
+        self._data_sort_column = None
+        self._data_sort_descending = False
         # Set height to leave room for logs
         self.data_tree = ttk.Treeview(data_tree_frame, columns=self.data_columns, show='headings', height=15)
         
         # Define headings
         for col in self.data_columns:
-            self.data_tree.heading(col, text=col)
+            self.data_tree.heading(col, text=col, command=lambda c=col: self.sort_data_tree_by_column(c))
             self.data_tree.column(col, width=100)
         
         # Scrollbars for data
@@ -456,9 +487,6 @@ class DeFiDashboard:
                     row_id = self.reports_tree.insert('', 'end', values=(date, tokens, status))
                     self.report_paths[row_id] = file_path
                     reports_found += 1
-                    
-                    if reports_found >= 10:  # Limit to last 10 reports
-                        break
                 
                 print(f"   ✅ Added {reports_found} reports to the list")
             else:
@@ -966,8 +994,8 @@ class DeFiDashboard:
         """Start the dashboard"""
         self.root.mainloop()
     
-    def ensure_token_data_viewer_current(self):
-        """Offer to rebuild token_data_viewer.csv when tokens.csv changes"""
+    def ensure_token_data_viewer_current(self, force_rebuild: bool = False):
+        """Ensure token_data_viewer.csv is current, optionally forcing a rebuild."""
         try:
             token_data_viewer_path = os.path.join(DATA_DIR, 'token_data_viewer.csv')
             tokens_csv_path = os.path.join(DATA_DIR, 'tokens.csv')
@@ -979,13 +1007,18 @@ class DeFiDashboard:
             
             tokens_mtime = os.path.getmtime(tokens_csv_path)
             viewer_mtime = os.path.getmtime(token_data_viewer_path) if viewer_exists else 0
-            needs_update = (not viewer_exists) or tokens_mtime > viewer_mtime
+            needs_update = force_rebuild or (not viewer_exists) or tokens_mtime > viewer_mtime
             
             if not needs_update:
                 return True
             
             # Ask the user before running the expensive updater (can overwrite cached real data)
-            if viewer_exists:
+            if force_rebuild:
+                prompt_msg = (
+                    "Refresh Data was requested.\n\n"
+                    "Do you want to rebuild Token Data Viewer cache now using live APIs?"
+                )
+            elif viewer_exists:
                 prompt_msg = (
                     "tokens.csv was updated after token_data_viewer.csv was generated.\n\n"
                     "Do you want to rebuild the Token Data Viewer cache now? "
@@ -1035,7 +1068,7 @@ class DeFiDashboard:
             self.add_log_entry(f"❌ Failed to refresh Token Data Viewer: {e}", "error")
             return False
     
-    def load_csv_data(self):
+    def load_csv_data(self, force_refresh: bool = False):
         """Load and display data from CSV file (preferred), else webhook cache, else risk_report.csv files"""
         try:
             import pandas as pd
@@ -1044,18 +1077,18 @@ class DeFiDashboard:
             import json
             
             # Rebuild token_data_viewer.csv if tokens.csv is newer
-            viewer_ready = self.ensure_token_data_viewer_current()
+            viewer_ready = self.ensure_token_data_viewer_current(force_rebuild=force_refresh)
             
             # PRIORITY 1: Try to load from token_data_viewer.csv first (only real data, no estimates)
             token_data_viewer_path = os.path.join(DATA_DIR, 'token_data_viewer.csv')
             if viewer_ready and os.path.exists(token_data_viewer_path):
-                print(f"      📁 Loading from token_data_viewer.csv (real data, no estimates)")
+                print(f"      📁 Loading Token Data Viewer cache (real data, no estimates)")
                 df = pd.read_csv(
                     token_data_viewer_path,
                     keep_default_na=False,
                     na_values=[''],
                 )
-                print(f"      ✅ Loaded {len(df)} tokens from token_data_viewer.csv")
+                print(f"      ✅ Loaded {len(df)} tokens from Token Data Viewer cache")
                 
                 # Clear existing data
                 for item in self.data_tree.get_children():
@@ -1091,7 +1124,7 @@ class DeFiDashboard:
                         continue
                 
                 print(f"      ✅ Successfully loaded {len(df)} tokens with real data")
-                messagebox.showinfo("Success", f"Loaded {len(df)} tokens with real data (token_data_viewer.csv)")
+                messagebox.showinfo("Success", f"Loaded {len(df)} tokens with real data")
                 return
             
             # PRIORITY 2: Try to load from tokens.csv (legacy support)
@@ -1112,7 +1145,11 @@ class DeFiDashboard:
             # PRIORITY 3: Try to use webhook cache data if CSV not available
             try:
                 # Get cache status from webhook server
-                response = requests.get('http://localhost:5001/webhook/status', timeout=5)
+                response = requests.get(
+                    f'{WEBHOOK_BASE_URL}/webhook/status',
+                    timeout=5,
+                    headers=_webhook_headers(),
+                )
                 if response.status_code == 200:
                     cache_status = response.json()
                     cache_age_hours = cache_status.get('cache_age_hours', 0)
@@ -1121,7 +1158,11 @@ class DeFiDashboard:
                     print(f"      📦 Webhook cache status: {cache_age_hours:.1f}h old, {cache_tokens} tokens")
                     
                     # Try to get the actual cache data
-                    cache_response = requests.get('http://localhost:5001/webhook/cache', timeout=10)
+                    cache_response = requests.get(
+                        f'{WEBHOOK_BASE_URL}/webhook/cache',
+                        timeout=10,
+                        headers=_webhook_headers(),
+                    )
                     if cache_response.status_code == 200:
                         cache_data = cache_response.json()
                         print(f"      ✅ Successfully loaded webhook cache data")
@@ -2362,19 +2403,74 @@ class DeFiDashboard:
     def refresh_data_view(self):
         """Refresh the data view"""
         try:
-            # Try to load the most recent data file
-            if os.path.exists(DATA_DIR):
-                files = [f for f in os.listdir(DATA_DIR) if f.endswith(('.csv', '.xlsx'))]
-                if files:
-                    latest_file = max(files, key=lambda x: os.path.getmtime(os.path.join(DATA_DIR, x)))
-                    if latest_file.endswith('.csv'):
-                        self.load_csv_data()
-                    else:
-                        self.load_excel_data()
-                else:
-                    self.add_log_entry("⚠️ No data files found", "warning")
+            # Refresh button must trigger a live CSV rebuild instead of loading whichever file is newest.
+            # This avoids stale XLSX/token_fallback snapshots masking new on-chain holders.
+            self.load_csv_data(force_refresh=True)
         except Exception as e:
             self.add_log_entry(f"❌ Refresh error: {e}", "error")
+
+    def _normalize_sort_value(self, column_name, value):
+        """Normalize table values for robust Treeview sorting."""
+        text = str(value or '').strip()
+        if not text or text.lower() in {'n/a', 'na', 'none', 'unknown', 'nan'}:
+            return (1, None)
+
+        numeric_columns = {'Market Cap', 'Volume 24h', 'Holders', 'Liquidity'}
+        if column_name in numeric_columns:
+            cleaned = (
+                text.replace('$', '')
+                .replace(',', '')
+                .replace('%', '')
+                .replace('B', 'e9')
+                .replace('M', 'e6')
+                .replace('K', 'e3')
+                .strip()
+            )
+            try:
+                return (0, float(cleaned))
+            except ValueError:
+                return (1, None)
+
+        return (0, text.lower())
+
+    def _refresh_data_tree_headings(self):
+        """Refresh column headers and keep sort arrow indicator in sync."""
+        for col in self.data_columns:
+            label = col
+            if col == self._data_sort_column:
+                label = f"{col} {'↑' if self._data_sort_descending else '↓'}"
+            self.data_tree.heading(col, text=label, command=lambda c=col: self.sort_data_tree_by_column(c))
+
+    def sort_data_tree_by_column(self, column_name):
+        """Sort Token Data Viewer by selected column with direction toggle."""
+        try:
+            if column_name not in self.data_columns:
+                return
+
+            # First click = ascending (A->Z / low->high), second click = descending.
+            if self._data_sort_column == column_name:
+                self._data_sort_descending = not self._data_sort_descending
+            else:
+                self._data_sort_column = column_name
+                self._data_sort_descending = False
+
+            col_index = self.data_columns.index(column_name)
+            rows = []
+            for item_id in self.data_tree.get_children(''):
+                values = self.data_tree.item(item_id, 'values')
+                cell_value = values[col_index] if col_index < len(values) else ''
+                sort_key = self._normalize_sort_value(column_name, cell_value)
+                rows.append((sort_key, item_id))
+
+            rows.sort(key=lambda x: x[0], reverse=self._data_sort_descending)
+            for new_index, (_, item_id) in enumerate(rows):
+                self.data_tree.move(item_id, '', new_index)
+
+            self._refresh_data_tree_headings()
+            direction = "descending (Z→A)" if self._data_sort_descending else "ascending (A→Z)"
+            self.add_log_entry(f"↕️ Sorted Token Data Viewer by {column_name} ({direction})", "info")
+        except Exception as e:
+            self.add_log_entry(f"❌ Sort error on {column_name}: {e}", "error")
     
     def _safe_get_value(self, row, possible_keys, default=None):
         """Safely get value from row trying multiple possible key names"""
@@ -2748,64 +2844,7 @@ class DeFiDashboard:
                 except Exception as e:
                     pass
             
-            # 2. Try COINAPI (if available)
-            coinapi_api_key = os.getenv('COINAPI_API_KEY')
-            if coinapi_api_key and symbol and symbol != 'Unknown':
-                try:
-                    # Get current market data from COINAPI
-                    coinapi_url = f"https://rest.coinapi.io/v1/exchangerate/{symbol.upper()}/USD"
-                    headers = {'X-CoinAPI-Key': coinapi_api_key}
-                    
-                    response = requests.get(coinapi_url, headers=headers, timeout=10)
-                    if response.status_code == 200:
-                        rate_data = response.json()
-                        price_usd = rate_data.get('rate', 0)
-                        
-                        # Get historical data for volume
-                        from datetime import datetime, timedelta
-                        end_time = datetime.utcnow()
-                        start_time = end_time - timedelta(days=1)
-                        
-                        ohlcv_url = f"https://rest.coinapi.io/v1/ohlcv/{symbol.upper()}/USD/history"
-                        params = {
-                            'period_id': '1DAY',
-                            'time_start': start_time.isoformat() + 'Z',
-                            'time_end': end_time.isoformat() + 'Z',
-                            'limit': 1
-                        }
-                        
-                        ohlcv_response = requests.get(ohlcv_url, headers=headers, params=params, timeout=10)
-                        volume_24h = 0
-                        if ohlcv_response.status_code == 200:
-                            ohlcv_data = ohlcv_response.json()
-                            if ohlcv_data:
-                                volume_24h = ohlcv_data[0].get('volume_traded', 0)
-                        
-                        # Get order book for liquidity estimation
-                        orderbook_url = f"https://rest.coinapi.io/v1/orderbook/{symbol.upper()}/USD"
-                        orderbook_response = requests.get(orderbook_url, headers=headers, timeout=10)
-                        liquidity = 0
-                        if orderbook_response.status_code == 200:
-                            orderbook = orderbook_response.json()
-                            if orderbook and 'asks' in orderbook and 'bids' in orderbook:
-                                ask_liquidity = sum(float(ask[1]) for ask in orderbook['asks'][:10])
-                                bid_liquidity = sum(float(bid[1]) for bid in orderbook['bids'][:10])
-                                liquidity = (ask_liquidity + bid_liquidity) / 2
-                        
-                        if data['market_cap'] == 0:
-                            # Estimate market cap from price (rough calculation)
-                            data['market_cap'] = price_usd * 1000000  # Assume 1M supply
-                        if data['volume_24h'] == 0:
-                            data['volume_24h'] = volume_24h
-                        if data['liquidity'] == 0:
-                            data['liquidity'] = liquidity
-                        
-                        print(f"      ✅ COINAPI data for {symbol}: ${data['market_cap']:,.0f} market cap, ${data['volume_24h']:,.0f} volume")
-                        return
-                except Exception as e:
-                    pass
-            
-            # 3. Try CoinPaprika API (free, no key required)
+            # 2. Try CoinPaprika API (free, no key required)
             if symbol and symbol != 'Unknown':
                 try:
                     # Get CoinPaprika ID from external mappings

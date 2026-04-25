@@ -11,8 +11,8 @@ import threading
 import subprocess
 from typing import Optional
 import shutil
-import glob
 import base64
+import webbrowser
 
 class WorkingProgressBar:
     """
@@ -31,6 +31,11 @@ class WorkingProgressBar:
         self.is_running = False
         self.lock = threading.Lock()
         self.finished = False
+        self.current_message = "Initializing assessment..."
+        self._last_render_ts = 0.0
+        self._min_render_interval = 0.35
+        self._browser_opened = False
+        self._last_browser_launch_attempt = 0.0
         
         # Progress bar phases for each token
         self.token_phases = [
@@ -46,6 +51,50 @@ class WorkingProgressBar:
         self._create_progress_window()
     
 
+    def _log_progress_error(self, context: str, err: str):
+        """Append progress window errors to local runtime log."""
+        try:
+            with open("/tmp/progress_bar_error.log", "a") as logf:
+                logf.write(f"[{context}] {time.ctime()}: {err}\n")
+        except Exception:
+            pass
+
+    def _open_progress_window(self):
+        """Open/restore the progress window in the default browser."""
+        target = getattr(self, "html_file", "/tmp/progress_bar.html")
+        if not target:
+            return False
+        self._last_browser_launch_attempt = time.time()
+        open_cmds = [
+            ['open', target],
+            ['open', '-a', 'Safari', target],
+            ['open', '-a', 'Google Chrome', target],
+        ]
+        for cmd in open_cmds:
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=8
+                )
+                if proc.returncode == 0:
+                    self._browser_opened = True
+                    return True
+                self._log_progress_error("OPEN", f"{' '.join(cmd)} -> rc={proc.returncode}, err={proc.stderr.strip()}")
+            except Exception as e:
+                self._log_progress_error("OPEN", f"{' '.join(cmd)} -> {e}")
+        try:
+            opened = bool(webbrowser.open(f"file://{target}", new=1))
+            if opened:
+                self._browser_opened = True
+                return True
+        except Exception as e:
+            self._log_progress_error("OPEN", f"webbrowser fallback failed: {e}")
+        self._browser_opened = False
+        return False
+
 
     def _create_progress_window(self):
         """Create a working progress bar using a simple GUI"""
@@ -53,9 +102,8 @@ class WorkingProgressBar:
             # Only add meta refresh if not finished
             meta_refresh = '<meta http-equiv="refresh" content="1">' if self.completed_phases < self.total_phases else ''
 
-            # Copy logo files to /tmp/ so they can be referenced from the HTML
+            # Resolve logos directory.
             logo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'docs', 'Logos'))
-            # Logo directory found
             if not os.path.exists(logo_dir):
                 print(f"[WARNING] Logo directory not found: {logo_dir}")
                 # Try alternative paths
@@ -73,136 +121,107 @@ class WorkingProgressBar:
                 else:
                     print(f"[ERROR] No logo directory found in any of the attempted paths")
                     logo_dir = None
-            # Updated logo files list with all available logos (excluding Compliance Logo)
-            logo_files = [
-                '1inch-exchange-logo.png',
-                'bitquery-logo.jpg',
-                'coingecko logo.png',
-                'defillama-logo.jpg',
-                '450px-EtherScan-Logo.png',
-                '254-2541523_welcome-cointelegraph-logo.png',
-                '360_F_968950664_bwRliEbRitVbRMOO7zfRg3P4K9RYK0E9.jpg',
-                'Alchemy-Logo-Vector-300x300.jpg',
-                'nqyB2SI.jpeg',
-                'x-new-twitter-icon-twitter-rebrand-little-bird-to-x-letter-symbol-twitter-x-new-logo-vcetor-elon-musk-change-social-media-logo-novation-set-of-twitter-new-and-old-round-and-square-logo-free-vector.jpg',
-                'telegram-logo-bundle-icon-set-telegram-app-editable-svg-transparent-background-premium-social-media-design-for-digital-download-free-vector.jpg'
-            ]
+            # Collect all logos in docs/Logos (including newly added source attributions).
+            logo_files = []
+            allowed_exts = {'.png', '.jpg', '.jpeg', '.webp', '.svg'}
+            excluded_files = {
+                'logo_watermark_2.svg',
+                'crypto.icns',
+                'crypto.png',
+                'crypto_small.png',
+            }
             if logo_dir:
-                for logo in logo_files:
-                    src = os.path.join(logo_dir, logo)
-                    dst = os.path.join('/tmp', logo)
-                    if os.path.exists(src):
-                        try:
-                            shutil.copyfile(src, dst)
-                            # Logo copied successfully
-                        except Exception as e:
-                            print(f"Warning: Could not copy logo {logo}: {e}")
-                    else:
-                        print(f"[WARNING] Logo file not found: {src}")
+                try:
+                    discovered = []
+                    for entry in os.listdir(logo_dir):
+                        if entry.startswith('.'):
+                            continue
+                        if entry.lower() in excluded_files:
+                            continue
+                        src = os.path.join(logo_dir, entry)
+                        if not os.path.isfile(src):
+                            continue
+                        _, ext = os.path.splitext(entry.lower())
+                        if ext in allowed_exts:
+                            discovered.append(entry)
+                    logo_files = sorted(discovered, key=lambda name: name.lower())
+                except Exception as e:
+                    print(f"[WARNING] Could not enumerate logos in {logo_dir}: {e}")
+                    logo_files = []
+
+            if not logo_files:
+                print("[WARNING] No logo files found to render in progress page attribution")
+
+            def _mime_type_for_logo(filename: str) -> str:
+                _, ext = os.path.splitext(filename.lower())
+                if ext == '.png':
+                    return 'image/png'
+                if ext in {'.jpg', '.jpeg'}:
+                    return 'image/jpeg'
+                if ext == '.webp':
+                    return 'image/webp'
+                if ext == '.svg':
+                    return 'image/svg+xml'
+                return 'application/octet-stream'
+
+            logo_count = len(logo_files)
+            if logo_count > 18:
+                logo_height_px = 52
+                top_gap_px = 18
+                bottom_gap_px = 14
+            elif logo_count > 10:
+                logo_height_px = 60
+                top_gap_px = 22
+                bottom_gap_px = 18
             else:
-                print("[WARNING] No logo directory available - logos will not be displayed")
-            
-            # Create logo HTML with embedded base64 images for proper display
-            logo_html = ""
-            if logo_dir:
-                for logo in logo_files:
-                    src = os.path.join(logo_dir, logo)
-                    if os.path.exists(src):
-                        try:
-                            # Read and encode logo as base64
-                            with open(src, 'rb') as f:
-                                logo_data = f.read()
-                                logo_b64 = base64.b64encode(logo_data).decode('utf-8')
-                                
-                                # Determine MIME type based on file extension
-                                if logo.lower().endswith('.png'):
-                                    mime_type = 'image/png'
-                                elif logo.lower().endswith('.jpg') or logo.lower().endswith('.jpeg'):
-                                    mime_type = 'image/jpeg'
-                                else:
-                                    mime_type = 'image/png'
-                                
-                                logo_html += f'<img src="data:{mime_type};base64,{logo_b64}" style="height: 60px; width: auto; border-radius: 12px; background: #fff; padding: 2px 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); opacity: 0.8; transition: opacity 0.2s; object-fit: contain;" alt="{logo}" onerror="this.style.display=\'none\'">'
-                                # Logo encoded successfully
-                        except Exception as e:
-                            print(f"[WARNING] Could not encode logo {logo}: {e}")
-                            # Fallback to colored box
-                            service_name = logo.split('-')[0].upper() if '-' in logo else logo.split('.')[0].upper()
-                            logo_html += f'<div style="height: 60px; width: 60px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">{service_name}</div>'
-                    else:
-                        # Fallback to colored box if logo not found
-                        service_name = logo.split('-')[0].upper() if '-' in logo else logo.split('.')[0].upper()
-                        logo_html += f'<div style="height: 60px; width: 60px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">{service_name}</div>'
-            
-            # Split logos into two rows: first 5 on top, last 6 on bottom (including Telegram)
-            logo_files_split = logo_files[:5], logo_files[5:]
+                logo_height_px = 70
+                top_gap_px = 26
+                bottom_gap_px = 22
+
+            def _logo_tile_html(logo_name: str, height_px: int) -> str:
+                src = os.path.join(logo_dir, logo_name) if logo_dir else ''
+                try:
+                    with open(src, 'rb') as f:
+                        logo_data = f.read()
+                    logo_b64 = base64.b64encode(logo_data).decode('utf-8')
+                    mime_type = _mime_type_for_logo(logo_name)
+                    return (
+                        f'<img src="data:{mime_type};base64,{logo_b64}" '
+                        f'style="height: {height_px}px; width: auto; border-radius: 10px; '
+                        'background: #fff; padding: 4px 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.10); '
+                        'opacity: 0.95; object-fit: contain;" '
+                        f'alt="{logo_name}" onerror="this.style.display=\'none\'">'
+                    )
+                except Exception as e:
+                    print(f"[WARNING] Could not encode logo {logo_name}: {e}")
+                    service_name = os.path.splitext(logo_name)[0][:10].upper()
+                    return (
+                        f'<div style="height: {height_px}px; min-width: 60px; padding: 0 8px; '
+                        'background: linear-gradient(45deg, #4b6cb7, #182848); border-radius: 10px; '
+                        'display: flex; align-items: center; justify-content: center; color: white; '
+                        'font-weight: bold; font-size: 9px; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">'
+                        f'{service_name}</div>'
+                    )
+
+            split_at = (len(logo_files) + 1) // 2
+            top_logos = logo_files[:split_at]
+            bottom_logos = logo_files[split_at:]
+
             top_logo_html = ""
             bottom_logo_html = ""
-            
-            if logo_dir:
-                # Generate top row (first 5 logos)
-                for logo in logo_files_split[0]:
-                    src = os.path.join(logo_dir, logo)
-                    if os.path.exists(src):
-                        try:
-                            with open(src, 'rb') as f:
-                                logo_data = f.read()
-                                logo_b64 = base64.b64encode(logo_data).decode('utf-8')
-                                
-                                if logo.lower().endswith('.png'):
-                                    mime_type = 'image/png'
-                                elif logo.lower().endswith('.jpg') or logo.lower().endswith('.jpeg'):
-                                    mime_type = 'image/jpeg'
-                                else:
-                                    mime_type = 'image/png'
-                                
-                                top_logo_html += f'<img src="data:{mime_type};base64,{logo_b64}" style="height: 95px; width: auto; border-radius: 14px; background: #fff; padding: 3px 10px; box-shadow: 0 3px 12px rgba(0,0,0,0.1); opacity: 0.9; transition: opacity 0.2s; object-fit: contain;" alt="{logo}" onerror="this.style.display=\'none\'">'
-                        except Exception as e:
-                            service_name = logo.split('-')[0].upper() if '-' in logo else logo.split('.')[0].upper()
-                            top_logo_html += f'<div style="height: 60px; width: 60px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">{service_name}</div>'
-                    else:
-                        service_name = logo.split('-')[0].upper() if '-' in logo else logo.split('.')[0].upper()
-                        top_logo_html += f'<div style="height: 60px; width: 60px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">{service_name}</div>'
-                
-                # Generate bottom row (last 5 logos)
-                for logo in logo_files_split[1]:
-                    src = os.path.join(logo_dir, logo)
-                    if os.path.exists(src):
-                        try:
-                            with open(src, 'rb') as f:
-                                logo_data = f.read()
-                                logo_b64 = base64.b64encode(logo_data).decode('utf-8')
-                                
-                                if logo.lower().endswith('.png'):
-                                    mime_type = 'image/png'
-                                elif logo.lower().endswith('.jpg') or logo.lower().endswith('.jpeg'):
-                                    mime_type = 'image/jpeg'
-                                else:
-                                    mime_type = 'image/png'
-                                
-                                bottom_logo_html += f'<img src="data:{mime_type};base64,{logo_b64}" style="height: 100px; width: auto; border-radius: 12px; background: #fff; padding: 3px 8px; box-shadow: 0 3px 12px rgba(0,0,0,0.1); opacity: 0.9; transition: opacity 0.2s; object-fit: contain;" alt="{logo}" onerror="this.style.display=\'none\'">'
-                        except Exception as e:
-                            service_name = logo.split('-')[0].upper() if '-' in logo else logo.split('.')[0].upper()
-                            bottom_logo_html += f'<div style="height: 50px; width: 50px; background: linear-gradient(45deg, #667eea, #764ba2); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">{service_name}</div>'
-                    else:
-                        service_name = logo.split('-')[0].upper() if '-' in logo else logo.split('.')[0].upper()
-                        bottom_logo_html += f'<div style="height: 50px; width: 50px; background: linear-gradient(45deg, #667eea, #764ba2); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">{service_name}</div>'
-            
+            for logo_name in top_logos:
+                top_logo_html += _logo_tile_html(logo_name, logo_height_px)
+            for logo_name in bottom_logos:
+                bottom_logo_html += _logo_tile_html(logo_name, logo_height_px)
+
+            # If we only have one row of logos, reuse it on bottom for balanced layout.
+            if top_logo_html and not bottom_logo_html:
+                bottom_logo_html = top_logo_html
+
             # Store both logo HTMLs for reuse in updates
             self.top_logo_html = top_logo_html
             self.bottom_logo_html = bottom_logo_html
-            
-            # If no logos found, use colored boxes
-            if not logo_html:
-                logo_html = f"""
-                    <div style="height: 60px; width: 60px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">1INCH</div>
-                    <div style="height: 60px; width: 60px; background: linear-gradient(45deg, #4834d4, #686de0); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">BITQ</div>
-                    <div style="height: 60px; width: 60px; background: linear-gradient(45deg, #00d2d3, #54a0ff); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">CG</div>
-                    <div style="height: 60px; width: 60px; background: linear-gradient(45deg, #ff9ff3, #f368e0); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">DEFI</div>
-                    <div style="height: 60px; width: 60px; background: linear-gradient(45deg, #ff9f43, #feca57); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">ETH</div>
-                """
-            
-            # All logos are now included in the main logo_files list above
+            # All detected logo files are now included in top/bottom rows.
 
             html_content = f"""
             <!DOCTYPE html>
@@ -230,24 +249,26 @@ class WorkingProgressBar:
                         flex-direction: row;
                         justify-content: center;
                         align-items: center;
-                        gap: 32px;
-                        margin-bottom: 24px;
+                        gap: 18px;
+                        margin-bottom: {top_gap_px}px;
                         margin-top: 8px;
                         flex-wrap: wrap;
+                        max-width: min(96vw, 1400px);
                     }}
                     .bottom-logo-row {{
                         display: flex;
                         flex-direction: row;
                         justify-content: center;
                         align-items: center;
-                        gap: 20px;
-                        margin-top: 24px;
+                        gap: 14px;
+                        margin-top: {bottom_gap_px}px;
                         margin-bottom: 8px;
                         flex-wrap: wrap;
+                        max-width: min(96vw, 1400px);
                     }}
                     .container {{
                         text-align: center;
-                        max-width: 500px;
+                        max-width: 640px;
                         z-index: 1;
                         position: relative;
                     }}
@@ -291,7 +312,7 @@ class WorkingProgressBar:
                     <div class="progress-container">
                         <div class="progress-bar" id="progress"></div>
                     </div>
-                    <div class="details" id="details">Token 0/{self.total_tokens} - Phase 0/3</div>
+                    <div class="details" id="details">0%</div>
                 </div>
                 <div class="bottom-logo-row">
                     {self.bottom_logo_html if hasattr(self, 'bottom_logo_html') else ""}
@@ -308,17 +329,15 @@ class WorkingProgressBar:
             shutil.move(self.html_temp, self.html_file)
             
             # Open the HTML file in a browser
-            subprocess.Popen(['open', self.html_file], 
-                           stdout=subprocess.DEVNULL, 
-                           stderr=subprocess.DEVNULL)
+            if not self._open_progress_window():
+                print("[WARNING] Could not auto-open progress window in browser")
             
             self.is_running = True
             # Removed the initialization message
                 
         except Exception as e:
             self.is_running = False
-            with open("/tmp/progress_bar_error.log", "a") as logf:
-                logf.write(f"[CREATE] {time.ctime()}: {e}\n")
+            self._log_progress_error("CREATE", str(e))
     
     def update_phase(self, phase_index: int, message: Optional[str] = None):
         """Update to a specific phase for the current token"""
@@ -342,6 +361,39 @@ class WorkingProgressBar:
                 
             self.title = new_title
             self._update_progress_bar()
+
+    def set_total_steps(self, total_steps: int):
+        """Configure custom total steps for smoother progress updates."""
+        with self.lock:
+            if not self.is_running or self.finished:
+                return
+            try:
+                total_steps = max(1, int(total_steps))
+            except Exception:
+                total_steps = self.total_phases if self.total_phases > 0 else 1
+            self.total_phases = total_steps
+            self.completed_phases = 0
+            self.current_token = 0
+            self.current_phase = 0
+            self._update_progress_bar()
+
+    def set_token_context(self, token_index: int, total_tokens: Optional[int] = None, token_name: Optional[str] = None):
+        """Compatibility no-op: token counters are intentionally hidden."""
+        return
+
+    def advance_steps(self, steps: int = 1, message: Optional[str] = None):
+        """Advance progress by logical steps (independent from token phase labels)."""
+        with self.lock:
+            if not self.is_running or self.finished:
+                return
+            try:
+                increment = max(1, int(steps))
+            except Exception:
+                increment = 1
+            self.completed_phases = min(self.total_phases, self.completed_phases + increment)
+            if message:
+                self.current_message = message
+            self._update_progress_bar()
     
     def next_token(self, token_name: Optional[str] = None):
         """Move to the next token and reset phases"""
@@ -353,11 +405,7 @@ class WorkingProgressBar:
             self.current_phase = 0
             self.completed_phases = (self.current_token - 1) * self.phases_per_token
             
-            token_display = f"Token {self.current_token}/{self.total_tokens}"
-            if token_name:
-                token_display += f" ({token_name})"
-            
-            self.current_message = f"{token_display} - {self.token_phases[0]}"
+            self.current_message = "Processing token data..."
             self._update_progress_bar()
     
     def complete_phase(self, message: Optional[str] = None):
@@ -389,10 +437,15 @@ class WorkingProgressBar:
         """Update the progress bar display"""
         if not self.is_running or self.finished:
             return
+        now_ts = time.time()
+        if (now_ts - self._last_render_ts) < self._min_render_interval and self.completed_phases < self.total_phases:
+            return
+        self._last_render_ts = now_ts
             
         try:
             # Calculate percentage (ensure it never exceeds 100%)
             percentage = min((self.completed_phases / self.total_phases) * 100 if self.total_phases > 0 else 0, 100.0)
+            percent_display = int(round(percentage))
             
             # Add a unique timestamp to force browser refresh
             timestamp = int(time.time() * 1000)
@@ -454,24 +507,26 @@ class WorkingProgressBar:
                         flex-direction: row;
                         justify-content: center;
                         align-items: center;
-                        gap: 32px;
+                        gap: 18px;
                         margin-bottom: 24px;
                         margin-top: 8px;
                         flex-wrap: wrap;
+                        max-width: min(96vw, 1400px);
                     }}
                     .bottom-logo-row {{
                         display: flex;
                         flex-direction: row;
                         justify-content: center;
                         align-items: center;
-                        gap: 20px;
+                        gap: 14px;
                         margin-top: 24px;
                         margin-bottom: 8px;
                         flex-wrap: wrap;
+                        max-width: min(96vw, 1400px);
                     }}
                     .container {{
                         text-align: center;
-                        max-width: 500px;
+                        max-width: 640px;
                         z-index: 1;
                         position: relative;
                     }}
@@ -515,7 +570,7 @@ class WorkingProgressBar:
                     <div class="progress-container">
                         <div class="progress-bar" id="progress"></div>
                     </div>
-                    <div class="details">Token {self.current_token}/{self.total_tokens} - Phase {min(self.current_phase + 1, 3)}/3</div>
+                    <div class="details">{percent_display}%</div>
                     {countdown_html}
                 </div>
                 <div class="bottom-logo-row">
@@ -535,13 +590,17 @@ class WorkingProgressBar:
             with open(self.html_temp, 'w') as f:
                 f.write(html_content)
             shutil.move(self.html_temp, self.html_file)
+
+            # If launch failed earlier, retry opening periodically.
+            now_ts = time.time()
+            if (not self._browser_opened) and ((now_ts - self._last_browser_launch_attempt) >= 5.0):
+                self._open_progress_window()
             
             # Small delay to ensure browser processes the update
-            time.sleep(0.3)  # Throttle updates to 0.3s
+            # Avoid blocking worker threads; HTML refresh cadence handles visual throttling.
                 
         except Exception as e:
-            with open("/tmp/progress_bar_error.log", "a") as logf:
-                logf.write(f"[UPDATE] {time.ctime()}: {e}\n")
+            self._log_progress_error("UPDATE", str(e))
             self.is_running = False
     
     def finish(self, message: str = "Risk assessment complete!"):
@@ -576,24 +635,26 @@ class WorkingProgressBar:
                             flex-direction: row;
                             justify-content: center;
                             align-items: center;
-                            gap: 32px;
+                            gap: 18px;
                             margin-bottom: 24px;
                             margin-top: 8px;
                             flex-wrap: wrap;
+                            max-width: min(96vw, 1400px);
                         }}
                         .bottom-logo-row {{
                             display: flex;
                             flex-direction: row;
                             justify-content: center;
                             align-items: center;
-                            gap: 20px;
+                            gap: 14px;
                             margin-top: 24px;
                             margin-bottom: 8px;
                             flex-wrap: wrap;
+                            max-width: min(96vw, 1400px);
                         }}
                         .container {{
                             text-align: center;
-                            max-width: 500px;
+                            max-width: 640px;
                             z-index: 1;
                             position: relative;
                         }}
@@ -693,8 +754,7 @@ class WorkingProgressBar:
                 # Give browser time to process the final state
                 time.sleep(1)
             except Exception as e:
-                with open("/tmp/progress_bar_error.log", "a") as logf:
-                    logf.write(f"[FINISH] {time.ctime()}: {e}\n")
+                self._log_progress_error("FINISH", str(e))
                 pass
             self.is_running = False
     
@@ -708,8 +768,7 @@ class WorkingProgressBar:
                 if os.path.exists(self.html_file):
                     os.remove(self.html_file)
             except Exception as e:
-                with open("/tmp/progress_bar_error.log", "a") as logf:
-                    logf.write(f"[CLOSE] {time.ctime()}: {e}\n")
+                self._log_progress_error("CLOSE", str(e))
             self.is_running = False
 
 # Console progress bar as fallback
@@ -730,6 +789,27 @@ class ConsoleProgressBar:
             "Fetching token data",
             "Analyzing security & market data"
         ]
+
+    def set_total_steps(self, total_steps: int):
+        try:
+            self.total_phases = max(1, int(total_steps))
+            self.completed_phases = 0
+            self.current_token = 0
+            self.current_phase = 0
+        except Exception:
+            pass
+
+    def set_token_context(self, token_index: int, total_tokens: Optional[int] = None, token_name: Optional[str] = None):
+        # Compatibility no-op: token counters are intentionally hidden.
+        return
+
+    def advance_steps(self, steps: int = 1, message: Optional[str] = None):
+        try:
+            increment = max(1, int(steps))
+        except Exception:
+            increment = 1
+        self.completed_phases = min(self.total_phases, self.completed_phases + increment)
+        self._print_progress(message or "Processing...")
     
     def update_phase(self, phase_index: int, message: Optional[str] = None):
         self.current_phase = phase_index
@@ -742,12 +822,7 @@ class ConsoleProgressBar:
         self.current_token += 1
         self.current_phase = 0
         self.completed_phases = (self.current_token - 1) * self.phases_per_token
-        
-        token_display = f"Token {self.current_token}/{self.total_tokens}"
-        if token_name:
-            token_display += f" ({token_name})"
-        
-        self._print_progress(f"{token_display} - {self.token_phases[0]}")
+        self._print_progress(self.token_phases[0])
     
     def complete_phase(self, message: Optional[str] = None):
         self.completed_phases += 1
@@ -771,8 +846,8 @@ class ConsoleProgressBar:
         bar_length = 30
         filled_length = int(bar_length * self.completed_phases // self.total_phases)
         bar = '█' * filled_length + '-' * (bar_length - filled_length)
-        
-        sys.stdout.write(f'\r{self.title}: [{bar}] {percent}% ({self.completed_phases}/{self.total_phases}) {eta_str} {message}')
+
+        sys.stdout.write(f'\r{self.title}: [{bar}] {percent}% {eta_str} {message}')
         sys.stdout.flush()
     
     def finish(self, message: str = "Risk assessment complete!"):
@@ -821,6 +896,26 @@ def update_progress_title(new_title: str):
     elif console_progress_bar:
         # Console progress bar doesn't have title updates
         pass
+
+def set_progress_total_steps(total_steps: int):
+    """Set total logical steps for progress completion."""
+    global working_progress_bar, console_progress_bar
+    if working_progress_bar:
+        working_progress_bar.set_total_steps(total_steps)
+    elif console_progress_bar:
+        console_progress_bar.set_total_steps(total_steps)
+
+def set_progress_token(token_index: int, total_tokens: int, token_name: Optional[str] = None):
+    """Compatibility no-op: token counters are intentionally hidden."""
+    return
+
+def advance_progress_steps(steps: int = 1, message: Optional[str] = None):
+    """Advance progress by N logical steps."""
+    global working_progress_bar, console_progress_bar
+    if working_progress_bar:
+        working_progress_bar.advance_steps(steps, message)
+    elif console_progress_bar:
+        console_progress_bar.advance_steps(steps, message)
 
 def next_token_progress(token_name: Optional[str] = None):
     """Move to next token in progress bar"""

@@ -6,11 +6,15 @@ Shows comprehensive about information with system details
 
 import os
 import sys
+import json
 import tkinter as tk
 from tkinter import ttk, messagebox
 import platform
 import webbrowser
 from datetime import datetime
+from urllib.parse import urlparse
+
+from system_update_manager import API_SERVICE_REGISTRY_FILE
 
 # macOS compatibility fixes
 if sys.platform == "darwin":
@@ -18,6 +22,94 @@ if sys.platform == "darwin":
     os.environ['PYTHON_CONFIGURE_OPTS'] = '--enable-framework'
     os.environ['TK_FRAMEWORK'] = '1'
     os.environ['DISPLAY'] = ':0'
+
+SERVICE_HOMEPAGE_URLS = {
+    "etherscan": "https://etherscan.io/",
+    "infura": "https://www.infura.io/",
+    "moralis": "https://moralis.io/",
+    "alchemy": "https://www.alchemy.com/",
+    "coingecko": "https://www.coingecko.com/",
+    "coinmarketcap": "https://coinmarketcap.com/",
+    "coincap": "https://coincap.io/",
+    "dexscreener": "https://dexscreener.com/",
+    "birdeye": "https://birdeye.so/",
+    "coinpaprika": "https://coinpaprika.com/",
+    "ethplorer": "https://ethplorer.io/",
+    "santiment": "https://santiment.net/",
+    "solscan": "https://solscan.io/",
+    "solanatracker": "https://solanatracker.io/",
+    "zapper": "https://zapper.xyz/",
+    "debank": "https://debank.com/",
+    "oneinch": "https://1inch.io/",
+    "lifi": "https://li.fi/",
+    "breadcrumbs": "https://www.breadcrumbs.app/",
+    "certik": "https://www.certik.com/",
+    "honeypot": "https://honeypot.is/",
+    "chainalysis_oracle": "https://www.chainalysis.com/",
+    "ofac_sls": "https://sanctionssearch.ofac.treas.gov/",
+    "scamsniffer": "https://www.scamsniffer.io/",
+    "twitter": "https://x.com/",
+    "discord": "https://discord.com/",
+    "telegram": "https://telegram.org/",
+    "reddit": "https://www.reddit.com/",
+    "arkham": "https://arkhamintelligence.com/",
+    "oklink": "https://www.oklink.com/",
+    "goplus": "https://gopluslabs.io/",
+    "trmlabs": "https://www.trmlabs.com/",
+    "chainabuse": "https://www.chainabuse.com/",
+    "thegraph": "https://thegraph.com/",
+    "dune": "https://dune.com/",
+    "bitcointalk": "https://bitcointalk.org/",
+    "cointelegraph": "https://cointelegraph.com/",
+    "coindesk": "https://www.coindesk.com/",
+    "theblock": "https://www.theblock.co/",
+    "decrypt": "https://decrypt.co/",
+    "defillama": "https://defillama.com/",
+}
+
+SERVICE_NAME_TO_ID = {
+    "etherscan api": "etherscan",
+    "infura api": "infura",
+    "moralis api": "moralis",
+    "alchemy api": "alchemy",
+    "coingecko api": "coingecko",
+    "coinmarketcap api": "coinmarketcap",
+    "coincap api": "coincap",
+    "dexscreener api": "dexscreener",
+    "birdeye api": "birdeye",
+    "coinpaprika api": "coinpaprika",
+    "ethplorer api": "ethplorer",
+    "santiment api": "santiment",
+    "solscan api": "solscan",
+    "solanatracker api": "solanatracker",
+    "zapper api": "zapper",
+    "debank api": "debank",
+    "1inch api": "oneinch",
+    "lifi api": "lifi",
+    "breadcrumbs api": "breadcrumbs",
+    "certik api": "certik",
+    "honeypot.is api": "honeypot",
+    "chainalysis oracle": "chainalysis_oracle",
+    "ofac sanctions list search": "ofac_sls",
+    "scamsniffer blacklist": "scamsniffer",
+    "x (twitter) api": "twitter",
+    "discord api": "discord",
+    "telegram api": "telegram",
+    "reddit api": "reddit",
+    "arkham api": "arkham",
+    "oklink api": "oklink",
+    "goplus api": "goplus",
+    "trm labs api": "trmlabs",
+    "chainabuse api": "chainabuse",
+    "the graph": "thegraph",
+    "dune api": "dune",
+    "bitcointalk": "bitcointalk",
+    "cointelegraph": "cointelegraph",
+    "coindesk": "coindesk",
+    "the block": "theblock",
+    "decrypt": "decrypt",
+    "defillama api": "defillama",
+}
 
 class AboutWindow:
     def __init__(self):
@@ -41,6 +133,88 @@ class AboutWindow:
         # Show window
         self.root.lift()
         self.root.focus_force()
+
+    def _fallback_sources(self):
+        return [
+            ("CoinGecko API", "https://www.coingecko.com/"),
+            ("CoinMarketCap API", "https://coinmarketcap.com/"),
+            ("Etherscan API", "https://etherscan.io/"),
+            ("Ethplorer API", "https://ethplorer.io/"),
+            ("Moralis API", "https://moralis.io/"),
+            ("Infura API", "https://www.infura.io/"),
+            ("Alchemy API", "https://www.alchemy.com/"),
+            ("1inch API", "https://1inch.io/"),
+            ("DeFiLlama API", "https://defillama.com/"),
+            ("DexScreener API", "https://dexscreener.com/"),
+            ("BirdEye API", "https://birdeye.so/"),
+            ("CoinCap API", "https://coincap.io/"),
+            ("Coinpaprika API", "https://coinpaprika.com/"),
+            ("The Graph", "https://thegraph.com/"),
+            ("Santiment API", "https://santiment.net/"),
+            ("Solscan API", "https://solscan.io/"),
+            ("SolanaTracker API", "https://solanatracker.io/"),
+            ("Dune API", "https://dune.com/"),
+            ("OKLink API", "https://www.oklink.com/"),
+            ("GoPlus API", "https://gopluslabs.io/"),
+            ("Chainabuse API", "https://www.chainabuse.com/"),
+            ("Honeypot.is API", "https://honeypot.is/"),
+            ("Chainalysis Oracle", "https://www.chainalysis.com/"),
+            ("TRM Labs API", "https://www.trmlabs.com/"),
+            ("ScamSniffer Blacklist", "https://www.scamsniffer.io/"),
+        ]
+
+    def _normalize_reference_url(self, service):
+        """Convert registry entry URL to service homepage URL when possible."""
+        if not isinstance(service, dict):
+            return ""
+
+        service_id = str(service.get("id") or "").strip().lower()
+        if service_id in SERVICE_HOMEPAGE_URLS:
+            return SERVICE_HOMEPAGE_URLS[service_id]
+
+        name_key = str(service.get("name") or "").strip().lower()
+        mapped_id = SERVICE_NAME_TO_ID.get(name_key, "")
+        if mapped_id and mapped_id in SERVICE_HOMEPAGE_URLS:
+            return SERVICE_HOMEPAGE_URLS[mapped_id]
+
+        raw = str(service.get("reference_url") or "").strip()
+        if not (raw.startswith("http://") or raw.startswith("https://")):
+            return ""
+
+        parsed = urlparse(raw)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}/"
+
+    def _load_dynamic_sources(self):
+        """Load API services from exported runtime registry (dynamic), fallback if unavailable."""
+        if not os.path.exists(API_SERVICE_REGISTRY_FILE):
+            return self._fallback_sources(), None
+        try:
+            with open(API_SERVICE_REGISTRY_FILE, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            services = payload.get("services", []) if isinstance(payload, dict) else []
+            if not isinstance(services, list) or not services:
+                return self._fallback_sources(), None
+
+            rows = []
+            for service in services:
+                if not isinstance(service, dict):
+                    continue
+                name = str(service.get("name") or service.get("id") or "").strip()
+                if not name:
+                    continue
+                url = self._normalize_reference_url(service)
+                if not (url.startswith("http://") or url.startswith("https://")):
+                    continue
+                rows.append((name, url))
+            if not rows:
+                return self._fallback_sources(), None
+            rows.sort(key=lambda x: x[0].lower())
+            updated_at = payload.get("updated_at") if isinstance(payload, dict) else None
+            return rows, updated_at
+        except Exception:
+            return self._fallback_sources(), None
         
     def create_gui(self):
         """Create the GUI"""
@@ -108,33 +282,29 @@ class AboutWindow:
             link.bind("<Enter>", lambda e: link.config(foreground='red'))
             link.bind("<Leave>", lambda e: link.config(foreground='blue'))
 
-        # Build comprehensive attributions (multi-column layout if needed)
-        build_attr_row(attribution_frame, "CoinGecko API", "https://www.coingecko.com/en/api")
-        build_attr_row(attribution_frame, "CoinMarketCap API", "https://coinmarketcap.com/api/")
-        build_attr_row(attribution_frame, "Etherscan API", "https://etherscan.io/apis")
-        build_attr_row(attribution_frame, "Ethplorer API", "https://ethplorer.io/")
-        build_attr_row(attribution_frame, "Moralis API", "https://moralis.io/")
-        build_attr_row(attribution_frame, "1inch API", "https://docs.1inch.io/")
-        build_attr_row(attribution_frame, "DeFiLlama API", "https://defillama.com/docs/api")
-        build_attr_row(attribution_frame, "The Graph", "https://thegraph.com/")
-        build_attr_row(attribution_frame, "Santiment API", "https://api.santiment.net/")
-        build_attr_row(attribution_frame, "Twitter API", "https://developer.twitter.com/en/docs/twitter-api")
-        build_attr_row(attribution_frame, "Telegram Bot API", "https://core.telegram.org/bots/api")
-        build_attr_row(attribution_frame, "Discord API", "https://discord.com/developers/docs/intro")
-        build_attr_row(attribution_frame, "CoinDesk RSS", "https://www.coindesk.com/arc/outboundfeeds/rss/")
-        build_attr_row(attribution_frame, "The Block API", "https://www.theblock.co/api/content")
-        build_attr_row(attribution_frame, "Decrypt RSS", "https://decrypt.co/feed")
-        # Ensure frame is large enough to show all
-        try:
-            self.root.update_idletasks()
-            attribution_frame.update_idletasks()
-            # Expand the window if content height exceeds
-            needed = attribution_frame.winfo_height() + 360
-            current_h = self.root.winfo_height()
-            if needed > current_h:
-                self.root.geometry(f"700x{needed}")
-        except Exception:
-            pass
+        # Scrollable sources list so newly integrated APIs fit without resizing hacks.
+        sources_canvas = tk.Canvas(attribution_frame, height=220, highlightthickness=0)
+        sources_scroll = ttk.Scrollbar(attribution_frame, orient="vertical", command=sources_canvas.yview)
+        sources_body = ttk.Frame(sources_canvas)
+        sources_canvas.configure(yscrollcommand=sources_scroll.set)
+        sources_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sources_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        sources_canvas.create_window((0, 0), window=sources_body, anchor="nw")
+        sources_body.bind(
+            "<Configure>",
+            lambda e: sources_canvas.configure(scrollregion=sources_canvas.bbox("all"))
+        )
+
+        sources, updated_at = self._load_dynamic_sources()
+        for label, url in sources:
+            build_attr_row(sources_body, label, url)
+        if updated_at:
+            ttk.Label(
+                sources_body,
+                text=f"Registry updated at: {updated_at}",
+                font=('Arial', 9),
+                foreground='gray'
+            ).pack(anchor=tk.W, pady=(8, 0))
         
         # Build info
         build_info = ttk.Label(info_frame, text=f"Build: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 

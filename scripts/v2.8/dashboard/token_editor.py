@@ -8,7 +8,7 @@ Provides a user-friendly interface for adding, editing, and removing tokens.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import pandas as pd
 import os
 import subprocess
@@ -16,6 +16,33 @@ import sys
 import atexit
 import tempfile
 from pathlib import Path
+
+SUPPORTED_TOKEN_CHAINS = [
+    'ethereum',
+    'bsc',
+    'op',
+    'sonic',
+    'polygon',
+    'arbitrum',
+    'base',
+    'linea',
+    'zksync',
+    'mantle',
+    'avalanche-c',
+    'thorchain',
+    'solana',
+    'sei',
+]
+
+
+def get_supported_chain_options(current_value=None):
+    """Return supported chain options, preserving unknown existing values."""
+    options = list(SUPPORTED_TOKEN_CHAINS)
+    current = str(current_value or '').strip()
+    if current and current not in options:
+        options.insert(0, current)
+    return options
+
 
 class TokenEditor:
     def __init__(self, parent=None):
@@ -184,6 +211,22 @@ class TokenEditor:
         edit_btn = ttk.Button(buttons_frame, text="✏️ Edit Token", 
                              command=self.edit_selected_token)
         edit_btn.pack(side="left", padx=(0, 10))
+
+        # Move controls
+        move_up_btn = ttk.Button(buttons_frame, text="⬆️ Up", command=lambda: self.move_selected_token(-1))
+        move_up_btn.pack(side="left", padx=(0, 6))
+
+        move_down_btn = ttk.Button(buttons_frame, text="⬇️ Down", command=lambda: self.move_selected_token(1))
+        move_down_btn.pack(side="left", padx=(0, 6))
+
+        move_top_btn = ttk.Button(buttons_frame, text="⏫ Top", command=self.move_selected_token_to_top)
+        move_top_btn.pack(side="left", padx=(0, 6))
+
+        move_bottom_btn = ttk.Button(buttons_frame, text="⏬ Bottom", command=self.move_selected_token_to_bottom)
+        move_bottom_btn.pack(side="left", padx=(0, 6))
+
+        move_to_btn = ttk.Button(buttons_frame, text="🔢 Move To...", command=self.move_selected_token_to_position)
+        move_to_btn.pack(side="left", padx=(0, 10))
         
         # Refresh button
         refresh_btn = ttk.Button(buttons_frame, text="🔄 Refresh", 
@@ -363,6 +406,86 @@ class TokenEditor:
                 # Update treeview
                 self.tree.item(selection[0], values=updated_values)
                 self.update_status(f"Updated {field_name} (not saved yet)")
+
+    def _get_single_selected_item(self):
+        """Return selected tree item id and ordered item ids."""
+        items = list(self.tree.get_children())
+        if not items:
+            messagebox.showwarning("Warning", "No tokens available to reorder")
+            return None, items
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select a token to move")
+            return None, items
+        return selection[0], items
+
+    def _set_item_active(self, item_id):
+        """Keep moved item selected and visible."""
+        try:
+            self.tree.selection_set(item_id)
+            self.tree.focus(item_id)
+            self.tree.see(item_id)
+        except Exception:
+            pass
+
+    def move_selected_token(self, offset):
+        """Move selected token by relative offset."""
+        item_id, items = self._get_single_selected_item()
+        if not item_id:
+            return
+        current_index = items.index(item_id)
+        new_index = max(0, min(len(items) - 1, current_index + int(offset)))
+        if new_index == current_index:
+            return
+        self.tree.move(item_id, "", new_index)
+        self._set_item_active(item_id)
+        self.update_status(f"Moved token to row {new_index + 1} (not saved yet)")
+
+    def move_selected_token_to_top(self):
+        """Move selected token to top of list."""
+        item_id, items = self._get_single_selected_item()
+        if not item_id:
+            return
+        if items.index(item_id) == 0:
+            return
+        self.tree.move(item_id, "", 0)
+        self._set_item_active(item_id)
+        self.update_status("Moved token to top (not saved yet)")
+
+    def move_selected_token_to_bottom(self):
+        """Move selected token to bottom of list."""
+        item_id, items = self._get_single_selected_item()
+        if not item_id:
+            return
+        last_index = len(items) - 1
+        if items.index(item_id) == last_index:
+            return
+        self.tree.move(item_id, "", last_index)
+        self._set_item_active(item_id)
+        self.update_status("Moved token to bottom (not saved yet)")
+
+    def move_selected_token_to_position(self):
+        """Move selected token to an explicit 1-based row index."""
+        item_id, items = self._get_single_selected_item()
+        if not item_id:
+            return
+        current_index = items.index(item_id)
+        target_position = simpledialog.askinteger(
+            "Move Token",
+            f"Enter destination row (1-{len(items)}):",
+            parent=self.window,
+            minvalue=1,
+            maxvalue=len(items),
+            initialvalue=current_index + 1,
+        )
+        if target_position is None:
+            return
+        new_index = int(target_position) - 1
+        if new_index == current_index:
+            return
+        self.tree.move(item_id, "", new_index)
+        self._set_item_active(item_id)
+        self.update_status(f"Moved token to row {target_position} (not saved yet)")
             
     def save_changes(self):
         """Save changes to CSV file and update token mappings"""
@@ -630,7 +753,7 @@ class ChainSelectionDialog:
         ttk.Label(main_frame, text="Select new chain:").pack(anchor="w")
         self.chain_var = tk.StringVar(value=self.current_value)
         chain_combo = ttk.Combobox(main_frame, textvariable=self.chain_var,
-                                  values=['ethereum', 'polygon', 'op', 'sonic', 'bsc', 'arbitrum'],
+                                  values=get_supported_chain_options(self.current_value),
                                   state="readonly", width=30)
         chain_combo.pack(fill="x", pady=(5, 20))
         
@@ -825,8 +948,9 @@ class TokenDialog:
         """Create the dialog window"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title(title)
-        self.dialog.geometry("400x300")
-        self.dialog.resizable(False, False)
+        self.dialog.geometry("560x500")
+        self.dialog.minsize(520, 430)
+        self.dialog.resizable(True, True)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         
@@ -841,9 +965,39 @@ class TokenDialog:
         
     def create_content(self):
         """Create dialog content"""
-        # Main frame
-        main_frame = ttk.Frame(self.dialog, padding="20")
-        main_frame.pack(fill="both", expand=True)
+        # Scrollable container to keep fields/buttons reachable on smaller displays.
+        container = ttk.Frame(self.dialog)
+        container.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        main_frame = ttk.Frame(canvas, padding="20")
+        canvas_window = canvas.create_window((0, 0), window=main_frame, anchor="nw")
+
+        def _on_frame_configure(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_configure(event):
+            canvas.itemconfigure(canvas_window, width=event.width)
+
+        def _on_mousewheel(event):
+            if event.delta:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            elif getattr(event, "num", None) == 4:
+                canvas.yview_scroll(-1, "units")
+            elif getattr(event, "num", None) == 5:
+                canvas.yview_scroll(1, "units")
+
+        main_frame.bind("<Configure>", _on_frame_configure)
+        canvas.bind("<Configure>", _on_canvas_configure)
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        canvas.bind("<Button-4>", _on_mousewheel)
+        canvas.bind("<Button-5>", _on_mousewheel)
         
         # Address field
         ttk.Label(main_frame, text="Address:").grid(row=0, column=0, sticky="w", pady=(0, 5))
@@ -855,7 +1009,7 @@ class TokenDialog:
         ttk.Label(main_frame, text="Chain:").grid(row=2, column=0, sticky="w", pady=(0, 5))
         self.chain_var = tk.StringVar(value=self.default_values[1])
         chain_combo = ttk.Combobox(main_frame, textvariable=self.chain_var, 
-                                  values=['ethereum', 'polygon', 'op', 'sonic', 'bsc', 'arbitrum'],
+                                  values=get_supported_chain_options(self.default_values[1]),
                                   state="readonly", width=20)
         chain_combo.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         
@@ -886,6 +1040,12 @@ class TokenDialog:
         
         # Configure grid weights
         main_frame.grid_columnconfigure(0, weight=1)
+
+        # Keep wheel scrolling active when cursor is over form controls.
+        for widget in (main_frame, address_entry, chain_combo, symbol_entry, name_entry):
+            widget.bind("<MouseWheel>", _on_mousewheel)
+            widget.bind("<Button-4>", _on_mousewheel)
+            widget.bind("<Button-5>", _on_mousewheel)
         
         # Focus on first entry
         address_entry.focus()

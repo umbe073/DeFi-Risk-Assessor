@@ -68,6 +68,8 @@ if sys.platform == "darwin":
 
 import json
 import base64
+import re
+from typing import Dict, Set
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -75,26 +77,61 @@ DEFAULT_API_KEYS = [
     "ALCHEMY_API_KEY",
     "INFURA_API_KEY",
     "ETHERSCAN_API_KEY",
+    "BSCSCAN_API_KEY",
     "ETHPLORER_API_KEY",
     "MORALIS_API_KEY",
     "COINGECKO_API_KEY",
+    "COINGECKO_PRO_API_KEY",
     "COINMARKETCAP_API_KEY",
-    "COINAPI_API_KEY",
+    "COINCAP_API_KEY",
     "COVALENT_API_KEY",
     "DEBANK_API_KEY",
+    "DEBANK_ENABLED",
     "DUNE_API_KEY",
+    "DUNE_ANALYTICS_API_KEY",
     "ZAPPER_API_KEY",
     "ARKHAM_API_KEY",
     "OKLINK_API_KEY",
     "TRMLABS_API_KEY",
+    "TRM_LABS_API_KEY",
     "CHAINABUSE_API_KEY",
     "SANTIMENT_API_KEY",
     "THE_GRAPH_API_KEY",
     "BREADCRUMBS_API_KEY",
     "BITQUERY_API_KEY",
     "BITQUERY_ACCESS_TOKEN",
-    "CERTIK_API_KEY"
-
+    "CERTIK_API_KEY",
+    "LI_FI_API_KEY",
+    "INCH_API_KEY",
+    "GOPLUS_API_KEY",
+    "SCORECHAIN_API_KEY",
+    "OPENSANCTIONS_API_KEY",
+    "LUKKA_API_KEY",
+    "DEFISAFETY_API_KEY",
+    "SOLSCAN_API_KEY",
+    "SOLSCAN_PRO_API_KEY",
+    "BIRDEYE_API_KEY",
+    "SOLANATRACKER_API_KEY",
+    "SOLANATRACKER_ENABLED",
+    "TWITTER_BEARER_TOKEN",
+    "TWITTER_API_KEY",
+    "TWITTER_API_SECRET",
+    "TWITTER_ACCESS_TOKEN",
+    "TWITTER_ACCESS_TOKEN_SECRET",
+    "TWITTER_CLIENT_ID",
+    "TWITTER_CLIENT_SECRET",
+    "TELEGRAM_BOT_TOKEN",
+    "DISCORD_BOT_TOKEN",
+    "REDDIT_CLIENT_ID",
+    "REDDIT_CLIENT_SECRET",
+    "COINTELEGRAPH_API_KEY",
+    "COINTELEGRAPH_USER_AGENT",
+    "COINDESK_API_KEY",
+    "COINDESK_USER_AGENT",
+    "THEBLOCK_API_KEY",
+    "THEBLOCK_USER_AGENT",
+    "DECRYPT_USER_AGENT",
+    "VESPIA_API_KEY"
 ]
 
 # Note: Running in foreground mode
@@ -104,6 +141,8 @@ print("Running credential manager")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..'))
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+ENV_FILE_PATH = os.path.join(PROJECT_ROOT, '.env')
+ENV_VAR_PATTERN = re.compile(r'^[A-Z][A-Z0-9_]*$')
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 # Import will be done after tkinter initialization to avoid conflicts
@@ -340,7 +379,7 @@ class GuiCreds:
         else:
             self.key_value_entry.configure(show='•')
     
-    def _read(self):
+    def _read(self) -> Dict[str, str]:
         try:
             print(f"🔍 Reading store from: {self.paths['enc_path']}")
             print(f"🔍 Meta file: {self.paths['meta_path']}")
@@ -356,7 +395,7 @@ class GuiCreds:
             # Preserve the original exception type and message
             raise e
 
-    def _write(self, kv: dict, reuse_salt: bool = True):
+    def _write(self, kv: Dict[str, str], reuse_salt: bool = True):
         try:
             if reuse_salt and os.path.exists(self.paths['meta_path']):
                 with open(self.paths['meta_path'], 'r') as f:
@@ -368,6 +407,132 @@ class GuiCreds:
         except Exception as e:
             raise e
 
+    def _is_credential_key(self, key: str) -> bool:
+        key_name = str(key or '').strip().upper()
+        if not key_name or not ENV_VAR_PATTERN.match(key_name):
+            return False
+        if key_name in DEFAULT_API_KEYS:
+            return True
+        hints = (
+            'API_KEY',
+            'TOKEN',
+            'SECRET',
+            'PASSWORD',
+            'USER_AGENT',
+            'CLIENT_ID',
+            'CLIENT_SECRET',
+        )
+        return any(hint in key_name for hint in hints)
+
+    def _normalize_env_value(self, value: str) -> str:
+        text = str(value or '').strip()
+        if len(text) >= 2 and (
+            (text[0] == '"' and text[-1] == '"')
+            or (text[0] == "'" and text[-1] == "'")
+        ):
+            text = text[1:-1]
+        return text
+
+    def _read_env_file(self, path: str = ENV_FILE_PATH) -> Dict[str, str]:
+        kv: Dict[str, str] = {}
+        if not path or not os.path.exists(path):
+            return kv
+        with open(path, 'r', encoding='utf-8') as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                key = key.strip()
+                if not self._is_credential_key(key):
+                    continue
+                kv[key] = self._normalize_env_value(value)
+        return kv
+
+    def _format_env_value(self, value: str) -> str:
+        text = str(value or '')
+        if not text:
+            return ''
+        if any(ch in text for ch in (' ', '#', '"', "'", '\\')):
+            escaped = text.replace('\\', '\\\\').replace('"', '\\"')
+            return f'"{escaped}"'
+        return text
+
+    def _write_env_file(
+        self,
+        updates: Dict[str, str] | None = None,
+        remove_keys: Set[str] | None = None,
+        path: str = ENV_FILE_PATH,
+    ):
+        updates = {str(k).strip(): str(v) for k, v in (updates or {}).items() if str(k).strip()}
+        remove_keys = {str(k).strip() for k in (remove_keys or set()) if str(k).strip()}
+
+        existing_lines = []
+        if path and os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                existing_lines = f.readlines()
+
+        output_lines = []
+        seen_keys = set()
+
+        for raw_line in existing_lines:
+            stripped = raw_line.strip()
+            if not stripped or stripped.startswith('#') or '=' not in stripped:
+                output_lines.append(raw_line)
+                continue
+
+            key = stripped.split('=', 1)[0].strip()
+            if not ENV_VAR_PATTERN.match(key):
+                output_lines.append(raw_line)
+                continue
+
+            if key in remove_keys:
+                seen_keys.add(key)
+                continue
+
+            if key in updates:
+                output_lines.append(f"{key}={self._format_env_value(updates[key])}\n")
+                seen_keys.add(key)
+            else:
+                output_lines.append(raw_line)
+                seen_keys.add(key)
+
+        for key, value in sorted(updates.items()):
+            if key in seen_keys or key in remove_keys:
+                continue
+            output_lines.append(f"{key}={self._format_env_value(value)}\n")
+
+        if path:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                f.writelines(output_lines)
+
+    def _sync_store_with_env(self, kv: Dict[str, str]):
+        merged = {str(k): str(v) for k, v in (kv or {}).items()}
+        env_kv = self._read_env_file()
+        store_changed = False
+        env_updates = {}
+
+        for key, value in env_kv.items():
+            if key not in merged or not str(merged.get(key, '')).strip():
+                if str(value).strip():
+                    merged[key] = str(value)
+                    store_changed = True
+
+        for key, value in merged.items():
+            val = str(value or '')
+            if not val:
+                continue
+            if str(env_kv.get(key, '')) != val:
+                env_updates[key] = val
+
+        if store_changed:
+            self._write(merged)
+        if env_updates:
+            self._write_env_file(updates=env_updates)
+
+        return merged, env_kv
+
     def _refresh_list(self, disable=False):
         self.keys_list.delete(0, tk.END)
         self.listbox_keys = []
@@ -377,10 +542,15 @@ class GuiCreds:
             stored = self._read()
         except Exception:
             stored = {}
+        env_stored = self._read_env_file()
         
         ordered_keys = []
         seen = set()
         for key in DEFAULT_API_KEYS:
+            if key not in seen:
+                ordered_keys.append(key)
+                seen.add(key)
+        for key in sorted(env_stored.keys()):
             if key not in seen:
                 ordered_keys.append(key)
                 seen.add(key)
@@ -391,7 +561,8 @@ class GuiCreds:
         
         for key in ordered_keys:
             label = key
-            if not stored.get(key):
+            value = str(stored.get(key) or env_stored.get(key) or '').strip()
+            if not value:
                 label = f"{key} (not set)"
             self.keys_list.insert(tk.END, label)
             self.listbox_keys.append(key)
@@ -406,12 +577,21 @@ class GuiCreds:
                 return
             
             print(f"🔍 Attempting to load store with password: {password[:3]}***")
+
+            if not (os.path.exists(self.paths['enc_path']) and os.path.exists(self.paths['meta_path'])):
+                self._write({}, reuse_salt=False)
             
             # Read the store and verify it's working
             store_data = self._read()
             if store_data is not None:
-                print(f"✅ Store loaded successfully with {len(store_data)} keys")
-                self.status.configure(text=f"✅ Store unlocked successfully ({len(store_data)} credentials stored)")
+                merged_store, env_kv = self._sync_store_with_env(store_data)
+                print(f"✅ Store loaded successfully with {len(merged_store)} keys")
+                self.status.configure(
+                    text=(
+                        f"✅ Store unlocked successfully "
+                        f"({len(merged_store)} credentials in secure store, {len(env_kv)} credentials in .env)"
+                    )
+                )
                 self._refresh_list()
             else:
                 print("⚠️ Store is empty or not initialized")
@@ -525,6 +705,8 @@ class GuiCreds:
                 return
             kv = self._read()
             val = kv.get(name, '')
+            if not val:
+                val = self._read_env_file().get(name, '')
             self.key_value_var.set(val)
             self.status.configure(text=f"Read value for {name}")
         except Exception as e:
@@ -540,6 +722,7 @@ class GuiCreds:
             kv = self._read()
             kv[name] = val
             self._write(kv)
+            self._write_env_file(updates={name: val})
             self.status.configure(text=f"✅ Set {name}")
             self._refresh_list()
         except Exception as e:
@@ -554,8 +737,9 @@ class GuiCreds:
             if name in kv:
                 kv.pop(name)
                 self._write(kv)
-                self.status.configure(text=f"✅ Removed {name}")
-                self._refresh_list()
+            self._write_env_file(remove_keys={name})
+            self.status.configure(text=f"✅ Removed {name}")
+            self._refresh_list()
         except Exception as e:
             messagebox.showerror("Remove failed", str(e))
 
@@ -566,83 +750,9 @@ class GuiCreds:
                 return
             
             print(f"🔍 Selected file: {path}")
-            
-            # Enhanced .env parse with filtering for API keys only
-            add = {}
-            imported_count = 0
-            excluded_count = 0
-            
-            # Define sections to include and exclude
-            include_sections = [
-                "# Required API Keys (Essential for basic functionality)",
-                "# Optional API Keys (For enhanced functionality)", 
-                "# SOCIAL SERVICES API Keys"
-            ]
-            
-            exclude_patterns = [
-                "_CHAIN_ID=",  # Exclude all chain IDs
-                "SCORECHAIN_API_KEY=",
-                "TRM_LABS_API_KEY=",
-                "OPENSANCTIONS_API_KEY=",
-                "LUKKA_API_KEY=",
-                "DEFISAFETY_API_KEY="
-            ]
-            
-            current_section = None
-            in_valid_section = False
-            
-            with open(path, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    
-                    # Check if this is a section header
-                    if line.startswith('#'):
-                        current_section = line
-                        in_valid_section = any(section in line for section in include_sections)
-                        
-                        # Special handling for social services section and its subsections
-                        if "# SOCIAL SERVICES API Keys" in line or "# Twitter (X) API" in line or "# Telegram API" in line or "# Reddit API" in line or "# Discord API" in line or "# BitcoinTalk Service" in line or "# Cointelegraph Service" in line or "# CoinDesk Service" in line or "# TheBlock Service" in line or "# Decrypt Service" in line:
-                            in_valid_section = True
-                        
-                        # Check for excluded sections
-                        if "#CHAIN IDs" in line or "# Not Implemented Yet" in line:
-                            in_valid_section = False
-                        
-                        print(f"🔍 Section: {line} - Valid: {in_valid_section}")
-                        continue
-                    
-                    # Skip empty lines
-                    if not line:
-                        continue
-                    
-                    # Only process lines if we're in a valid section
-                    if not in_valid_section:
-                        continue
-                    
-                    if '=' in line:
-                        try:
-                            k, v = line.split('=', 1)
-                            key = k.strip()
-                            value = v.strip().strip('"').strip("'")
-                            
-                            # Check if this key should be excluded
-                            should_exclude = any(pattern in f"{key}=" for pattern in exclude_patterns)
-                            
-                            if should_exclude:
-                                excluded_count += 1
-                                print(f"⚠️ Excluded: {key}")
-                                continue
-                            
-                            # Validate key format and add if valid
-                            if key and not key.startswith('#'):
-                                add[key] = value
-                                imported_count += 1
-                                print(f"✅ Imported: {key}")
-                        except Exception as parse_error:
-                            print(f"Warning: Could not parse line {line_num}: {line}")
-                            continue
-            
-            print(f"🔍 Parsed {imported_count} API keys from .env file (excluded {excluded_count} chain IDs and unimplemented keys)")
+            raw_import = self._read_env_file(path=path)
+            add = {k: v for k, v in raw_import.items() if self._is_credential_key(k)}
+            imported_count = len(add)
             
             if imported_count > 0:
                 try:
@@ -676,8 +786,9 @@ class GuiCreds:
                 print("🔍 Writing updated store...")
                 self._write(kv)
                 print("✅ Store written successfully")
+                self._write_env_file(updates=add)
                 
-                self.status.configure(text=f"✅ Successfully imported {imported_count} API keys (excluded {excluded_count} chain IDs and unimplemented keys)")
+                self.status.configure(text=f"✅ Successfully imported {imported_count} API keys from file")
                 self._refresh_list()
             else:
                 self.status.configure(text="⚠️ No valid keys found in .env file")

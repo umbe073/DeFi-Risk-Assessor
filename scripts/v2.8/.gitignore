@@ -1,0 +1,47 @@
+# ── Python artefacts ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── Runtime / generated data ─────────────────────────────────────────────────
+# SQLite databases (contain live user/billing/support data — NEVER commit)
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Log files
+logs/
+*.log
+webhook.log
+
+# Lock / pid files
+*.pid
+defi_dashboard_locks/
+
+# API / token cache files
+api_cache.db
+fallback_data.json
+
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+credential_management/__pycache__/
+credential_management/*.db
+credential_management/credentials/
+credential_management/keys/
+
+# ── Deploy artefacts ─────────────────────────────────────────────────────────
+# Server-specific paths, IPs, or SSH keys generated at deploy time
+deploy/vultr/*.key
+deploy/vultr/*.pem
+
+# ── Attachment uploads ────────────────────────────────────────────────────────
+web_portal/data/
+web_portal/app/static/uploads/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store

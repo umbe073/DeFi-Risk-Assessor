@@ -191,7 +191,8 @@ class CacheManager:
             current_time = time.time()
             expired_keys = []
             
-            for key, timestamp in self.timestamps.items():
+            # Snapshot to avoid concurrent-size-change errors during cleanup.
+            for key, timestamp in list(self.timestamps.items()):
                 ttl = self.ttl_values.get(key, self.default_ttl)
                 if current_time - timestamp > ttl:
                     expired_keys.append(key)

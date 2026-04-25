@@ -72,7 +72,7 @@ class MinimalDeFiDashboard:
         
         def run_assessment():
             try:
-                script_path = os.path.join(PROJECT_ROOT, 'scripts/v1.5/defi_complete_risk_assessment_clean.py')
+                script_path = os.path.join(PROJECT_ROOT, 'scripts', 'v2.0', 'defi_complete_risk_assessment_clean.py')
                 subprocess.run([sys.executable, script_path], check=True)
                 self.root.after(0, lambda: self.status_label.config(text="Assessment completed!"))
             except Exception as e:
@@ -83,7 +83,7 @@ class MinimalDeFiDashboard:
     def open_api_dashboard(self):
         """Open API dashboard"""
         try:
-            script_path = os.path.join(PROJECT_ROOT, 'scripts/v1.5/dashboard/api_service_dashboard.py')
+            script_path = os.path.join(PROJECT_ROOT, 'scripts', 'v2.0', 'dashboard', 'api_service_dashboard.py')
             subprocess.Popen([sys.executable, script_path])
             self.status_label.config(text="API Dashboard opened")
         except Exception as e:

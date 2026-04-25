@@ -10,6 +10,8 @@ import json
 import tkinter as tk
 from tkinter import ttk
 
+from system_update_manager import SETTINGS_FILE, humanize_elapsed, load_update_state
+
 # macOS compatibility fixes
 if sys.platform == "darwin":
     os.environ['TK_SILENCE_DEPRECATION'] = '1'
@@ -43,9 +45,8 @@ class StatusWindow:
     def get_cache_refresh_interval(self):
         """Get cache refresh interval from settings"""
         try:
-            settings_file = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'settings.json')
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, 'r') as f:
                     settings = json.load(f)
                     return settings.get('cache', {}).get('auto_refresh_interval', 'Not configured')
             return "Not configured"
@@ -55,9 +56,8 @@ class StatusWindow:
     def get_cache_retention(self):
         """Get cache retention period from settings"""
         try:
-            settings_file = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'settings.json')
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, 'r') as f:
                     settings = json.load(f)
                     return settings.get('cache', {}).get('cache_retention', 'Not configured')
             return "Not configured"
@@ -77,9 +77,8 @@ class StatusWindow:
         
         # Add status information
         try:
-            settings_file = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'settings.json')
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, 'r') as f:
                     settings = json.load(f)
                     background_monitoring = settings.get('cache', {}).get('background_monitoring', False)
                     if background_monitoring:
@@ -92,6 +91,13 @@ class StatusWindow:
             cache_status = f"Error ❌ (Invalid settings file: {str(e)[:30]}...)"
         except Exception as e:
             cache_status = f"Error ❌ (Cannot read settings: {str(e)[:30]}...)"
+
+        update_state = load_update_state()
+        libs_last_check = humanize_elapsed(update_state.get("last_check_at"))
+        libs_last_update = humanize_elapsed(update_state.get("last_update_at"))
+        libs_pending = int(update_state.get("last_outdated_count", 0) or 0)
+        libs_check_status = str(update_state.get("last_check_status", "unknown"))
+        libs_update_status = str(update_state.get("last_update_status", "unknown"))
         
         status_info = f"""
 ✅ System Tray: Running
@@ -124,6 +130,13 @@ class StatusWindow:
 - Chain Manager: Available
 - Settings: Available
 - Status Window: Active
+
+🧰 System Update:
+- Last dependency check: {libs_last_check}
+- Last successful/attempted update: {libs_last_update}
+- Pending package updates: {libs_pending}
+- Check status: {libs_check_status}
+- Update status: {libs_update_status}
         """
         
         status_text.insert(tk.END, status_info)

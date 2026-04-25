@@ -64,11 +64,14 @@ from tkinter import ttk, messagebox
 import json
 import threading
 import time
+import hmac
+import hashlib
+import base64
 import requests
 import tempfile
 import signal
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # App bundle mode is now handled by the macOS compatibility fix
 # No need for separate dock utilities
@@ -76,6 +79,280 @@ from datetime import datetime, timedelta
 # Project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+
+CHAINABUSE_STANDARD_MONTH_SECONDS = 30 * 24 * 60 * 60
+PROBE_COOLDOWN_MIN_SECONDS = 30
+PROBE_COOLDOWN_MAX_SECONDS = CHAINABUSE_STANDARD_MONTH_SECONDS
+CHAINABUSE_STANDARD_MONTHLY_CALLS = 10
+CHAINABUSE_STANDARD_PROBE_SPACING_SECONDS = (
+    CHAINABUSE_STANDARD_MONTH_SECONDS // CHAINABUSE_STANDARD_MONTHLY_CALLS
+)
+CHAINABUSE_PARTNER_PROBE_SPACING_SECONDS = 300
+
+
+def _chainabuse_partner_tier_enabled() -> bool:
+    tier = (
+        str(os.environ.get("CHAINABUSE_RATE_LIMIT_TIER", "standard") or "")
+        .strip()
+        .lower()
+    )
+    return tier in {"partner", "premium", "law_enforcement", "law-enforcement", "le"}
+
+
+def _chainabuse_live_probe_enabled() -> bool:
+    """Return true when API Center may spend a ChainAbuse request on a live probe."""
+    if _chainabuse_partner_tier_enabled():
+        return True
+    flag = (
+        str(os.environ.get("CHAINABUSE_LIVE_PROBE_ENABLED", "") or "")
+        .strip()
+        .lower()
+    )
+    return flag in {"1", "true", "yes", "on"}
+
+
+def _chainabuse_probe_spacing_seconds() -> int:
+    if _chainabuse_partner_tier_enabled():
+        return CHAINABUSE_PARTNER_PROBE_SPACING_SECONDS
+    return CHAINABUSE_STANDARD_PROBE_SPACING_SECONDS
+
+
+def _chainabuse_local_probe_message(service_name: str) -> str:
+    """Message for the default non-consuming ChainAbuse API Center probe."""
+    return (
+        f"✅ {service_name}: CHAINABUSE_API_KEY is configured. Live API Center probes are disabled "
+        "for standard ChainAbuse keys so the 10/month quota is reserved for the shared cache queue; "
+        "cached assessment results remain available to paid plans."
+    )
+
+
+CUSTOMER_FACING_SERVICE_DESCRIPTIONS = {
+    "etherscan": "Ethereum explorer and contract data",
+    "infura": "Blockchain RPC infrastructure",
+    "moralis": "On-chain token and wallet data",
+    "alchemy": "Blockchain RPC and token data",
+    "coingecko": "Crypto prices and market data",
+    "coinmarketcap": "Crypto rankings and market data",
+    "coinapi": "Crypto market and exchange data",
+    "coinpaprika": "Crypto prices and market data",
+    "birdeye": "Token pricing and liquidity data",
+    "coincap": "Crypto prices and market data",
+    "dexscreener": "DEX liquidity and pair data",
+    "ethplorer": "Ethereum token and holder data",
+    "santiment": "On-chain and sentiment analytics",
+    "solscan": "Solana explorer and token data",
+    "solanatracker": "Solana token and holder data",
+    "zapper": "DeFi portfolio and protocol data",
+    "debank": "DeFi portfolio and protocol data",
+    "oneinch": "DEX aggregation and token data",
+    "lifi": "Cross-chain route and bridge data",
+    "breadcrumbs": "Address risk and sanctions screening",
+    "certik": "Smart contract security intelligence",
+    "chainalysis_oracle": "Sanctions screening reference",
+    "honeypot": "Honeypot and token-tax screening",
+    "ofac_sls": "Sanctions list screening",
+    "scamsniffer": "Scam address intelligence",
+    "twitter": "Social sentiment and trend data",
+    "discord": "Community activity signals",
+    "telegram": "Community activity signals",
+    "reddit": "Community sentiment signals",
+    "arkham": "On-chain entity intelligence",
+    "oklink": "Address labels and risk intelligence",
+    "goplus": "Token and address security checks",
+    "trmlabs": "Sanctions and risk screening",
+    "chainabuse": "Shared abuse-report cache",
+    "thegraph": "Indexed blockchain protocol data",
+    "dune": "On-chain analytics and query data",
+    "bitcointalk": "Forum discussion signals",
+    "cointelegraph": "Crypto news signals",
+    "coindesk": "Crypto news signals",
+    "theblock": "Crypto news signals",
+    "decrypt": "Crypto news signals",
+    "defillama": "DeFi protocol and TVL data",
+    "defi_api": "Token security and scanner data",
+}
+
+
+def _chainabuse_probe_cooldown_after_429_seconds() -> float:
+    default = (
+        CHAINABUSE_PARTNER_PROBE_SPACING_SECONDS
+        if _chainabuse_partner_tier_enabled()
+        else CHAINABUSE_STANDARD_MONTH_SECONDS
+    )
+    raw = os.environ.get("CHAINABUSE_PROBE_COOLDOWN_AFTER_429")
+    try:
+        wait = float(raw) if raw is not None else float(default)
+    except (TypeError, ValueError):
+        wait = float(default)
+    if _chainabuse_partner_tier_enabled():
+        return max(30.0, wait)
+    # Standard ChainAbuse keys are quota-limited monthly; a 429 usually means
+    # the monthly bucket is exhausted, not a short rolling window.
+    return max(float(CHAINABUSE_STANDARD_MONTH_SECONDS), wait)
+
+
+def _load_env_for_probes() -> None:
+    """Load suite and web portal dotenv files for API probes."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    scripts_v20 = os.path.dirname(here)
+    scripts_dir = os.path.dirname(scripts_v20)
+    suite_root = os.path.dirname(scripts_dir)
+    web_portal = os.path.join(suite_root, 'scripts', 'v2.0', 'web_portal')
+    forced = str(os.environ.get('HODLER_SUITE_ENV_FILE', '') or '').strip()
+    candidates = [
+        forced,
+        os.path.join(suite_root, '.env'),
+        os.path.join(web_portal, '.env'),
+        os.path.join(web_portal, 'web_portal.env'),
+        os.path.join(suite_root, 'web_portal', 'web_portal.env'),
+        os.path.join(suite_root, 'web_portal', '.env'),
+        '/etc/hodler-suite/web_portal.env',
+        '/etc/hodler-suite/hodler-suite.env',
+    ]
+    seen: set[str] = set()
+    for path in candidates:
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        if os.path.isfile(path):
+            load_dotenv(path, override=False)
+    try:
+        import sys
+
+        if web_portal not in sys.path:
+            sys.path.insert(0, web_portal)
+        from app.credentials_vault import apply_credentials_vault_if_configured
+
+        apply_credentials_vault_if_configured()
+    except Exception:
+        pass
+
+
+def _normalize_chainabuse_key_for_basic_auth(raw: str) -> str:
+    """Strip BOM, quotes, and mistaken auth prefixes from env values before Basic auth."""
+    key = str(raw or "").replace("\ufeff", "").strip()
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in {'"', "'"}:
+        key = key[1:-1].strip()
+    lowered = key.lower()
+    if lowered.startswith("bearer "):
+        key = key[7:].strip()
+    elif lowered.startswith("basic "):
+        key = key[6:].strip()
+    return key
+
+
+def _chainabuse_basic_authorization_header(raw_api_key: str) -> str:
+    """Basic with empty password (OpenAPI / ``curl --user KEY:``)."""
+    user = _normalize_chainabuse_key_for_basic_auth(raw_api_key)
+    return "Basic " + base64.b64encode(f"{user}:".encode("utf-8")).decode("ascii")
+
+
+def _chainabuse_basic_authorization_header_dual(raw_api_key: str) -> str:
+    """Basic with API key as both username and password (Chainabuse getting-started docs)."""
+    user = _normalize_chainabuse_key_for_basic_auth(raw_api_key)
+    return "Basic " + base64.b64encode(f"{user}:{user}".encode("utf-8")).decode("ascii")
+
+
+def _chainabuse_reports_url() -> str:
+    """Resolve GET reports URL; tolerate ``CHAINABUSE_BASE_URL`` already ending in ``/v0``."""
+    raw = (os.getenv("CHAINABUSE_BASE_URL") or "https://api.chainabuse.com").strip().rstrip("/")
+    if raw.lower().endswith("/v0"):
+        return f"{raw}/reports"
+    return f"{raw}/v0/reports"
+
+
+def _chainabuse_json_error_hint(response) -> str:
+    """Return a short JSON ``message``/``reason`` from Chainabuse error bodies (e.g. 401)."""
+    if response is None:
+        return ""
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            msg = str(
+                data.get("message") or data.get("reason") or data.get("error") or ""
+            ).strip()
+            if msg:
+                return msg[:200]
+    except Exception:
+        pass
+    return ""
+
+
+def _probe_http_timeout_seconds(service_id: str) -> int:
+    """HTTP read timeout for dashboard probes (some public hosts are slow under audit load)."""
+    sid = (service_id or "").strip().lower()
+    if sid == "defillama":
+        raw = (os.getenv("DEFILLAMA_PROBE_TIMEOUT_SECONDS") or "35").strip()
+        try:
+            return max(10, int(float(raw)))
+        except (TypeError, ValueError):
+            return 35
+    return 10
+
+
+def _parse_retry_after_seconds(response) -> float | None:
+    """Parse ``Retry-After`` as delta-seconds or HTTP-date; return seconds to wait or None."""
+    if response is None:
+        return None
+    raw = response.headers.get("Retry-After") if hasattr(response, "headers") else None
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        secs = float(text)
+        if secs > 0:
+            return min(
+                float(PROBE_COOLDOWN_MAX_SECONDS),
+                max(float(PROBE_COOLDOWN_MIN_SECONDS), secs),
+            )
+    except (TypeError, ValueError):
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+
+        dt = parsedate_to_datetime(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = (dt - datetime.now(timezone.utc)).total_seconds()
+        if delta > 0:
+            return min(
+                float(PROBE_COOLDOWN_MAX_SECONDS),
+                max(float(PROBE_COOLDOWN_MIN_SECONDS), delta),
+            )
+    except Exception:
+        pass
+    return None
+
+
+def _record_probe_cooldown_after_429(service_id: str, response) -> None:
+    """Mirror provider rate limits into ``rate_limits.json`` for API Center cooldown display."""
+    sid = str(service_id or "").strip().lower()
+    if not sid:
+        return
+    wait = _parse_retry_after_seconds(response)
+    if wait is None:
+        if sid == "chainabuse":
+            wait = _chainabuse_probe_cooldown_after_429_seconds()
+        else:
+            try:
+                wait = float(os.environ.get("API_PROBE_COOLDOWN_AFTER_429", "120") or 120)
+            except (TypeError, ValueError):
+                wait = 120.0
+    try:
+        from app.api_service_manager import record_probe_cooldown_until
+    except Exception:
+        return
+    try:
+        record_probe_cooldown_until(sid, seconds=float(wait))
+    except Exception:
+        return
+
 
 class APIServiceDashboard:
     def __init__(self):
@@ -137,7 +414,7 @@ class APIServiceDashboard:
         
     def initialize_services(self):
         """Initialize API service configurations organized by category"""
-        return {
+        services = {
             # === BLOCKCHAIN INFRASTRUCTURE ===
             'etherscan': {
                 'name': 'Etherscan API',
@@ -147,7 +424,7 @@ class APIServiceDashboard:
                 'rate_period': 1,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://api.etherscan.io/api?module=stats&action=ethsupply&apikey=',
+                'test_endpoint': 'https://api.etherscan.io/v2/api?chainid=1&module=stats&action=ethsupply&apikey=',
                 'description': 'Ethereum blockchain explorer & contract data'
             },
             'infura': {
@@ -216,7 +493,7 @@ class APIServiceDashboard:
                 'last_call': 0,
                 'calls_count': 0,
                 'test_endpoint': 'https://rest.coinapi.io/v1/exchangerate/BTC/USD',
-                'description': 'Institutional-grade crypto market data & exchange rates (2025 REST API)'
+                'description': 'Institutional-grade crypto market data & exchange rates (REST API)'
             },
             'coinpaprika': {
                 'name': 'Coinpaprika API',
@@ -228,6 +505,39 @@ class APIServiceDashboard:
                 'calls_count': 0,
                 'test_endpoint': 'https://api.coinpaprika.com/v1/tickers/btc-bitcoin',
                 'description': 'Alternative crypto market data & historical prices (Free - No API key required)'
+            },
+            'birdeye': {
+                'name': 'BirdEye API',
+                'env_key': 'BIRDEYE_API_KEY',
+                'category': '📊 Market Data',
+                'rate_limit': 60,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': 'https://public-api.birdeye.so/defi/networks',
+                'description': 'Solana token liquidity, pricing & holder analytics'
+            },
+            'coincap': {
+                'name': 'CoinCap API',
+                'env_key': 'COINCAP_API_KEY',
+                'category': '📊 Market Data',
+                'rate_limit': 200,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': 'https://api.coincap.io/v2/assets?limit=1',
+                'description': 'Market data; optional COINCAP_API_KEY for v3 (Bearer), else public v2 tier',
+            },
+            'dexscreener': {
+                'name': 'DexScreener API',
+                'env_key': None,
+                'category': '📊 Market Data',
+                'rate_limit': 300,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': 'https://api.dexscreener.com/latest/dex/tokens/0x0000000000000000000000000000000000000000',
+                'description': 'DEX pairs, liquidity & price discovery (no API key required)'
             },
 
             # === BLOCKCHAIN ANALYTICS ===
@@ -253,6 +563,31 @@ class APIServiceDashboard:
                 'test_endpoint': 'https://api.santiment.net/graphql',
                 'description': 'Social sentiment, dev activity & on-chain metrics'
             },
+            'solscan': {
+                'name': 'Solscan API',
+                'env_key': 'SOLSCAN_API_KEY',
+                'category': '📈 Blockchain Analytics',
+                'rate_limit': 60,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': 'https://public-api.solscan.io/chaininfo',
+                'description': 'Solana explorer; public chaininfo or Pro probe via SOLSCAN_PROBE_USE_PRO_API.',
+            },
+            'solanatracker': {
+                'name': 'SolanaTracker API',
+                'env_key': 'SOLANATRACKER_API_KEY',
+                'category': '📈 Blockchain Analytics',
+                'rate_limit': 60,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': (
+                    'https://data.solanatracker.io/tokens/'
+                    'So11111111111111111111111111111111111111112/holders'
+                ),
+                'description': 'Solana token holder & liquidity metrics'
+            },
 
             # === DEFI PROTOCOLS ===
             'zapper': {
@@ -263,8 +598,8 @@ class APIServiceDashboard:
                 'rate_period': 1,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://api.zapper.xyz/v2/prices',
-                'description': 'DeFi portfolio tracking & yield farming analytics (2025 v2 REST)'
+                'test_endpoint': 'https://public.zapper.xyz/graphql',
+                'description': 'DeFi portfolio tracking & yield analytics (GraphQL API)'
             },
             'debank': {
                 'name': 'DeBank API',
@@ -275,7 +610,9 @@ class APIServiceDashboard:
                 'last_call': 0,
                 'calls_count': 0,
                 'test_endpoint': 'https://pro-openapi.debank.com/v1/user/token_list?id=0x5853ed4f26a3fcea565b3fbc698bb19cdf6deb85',
-                'description': 'DeFi portfolio & protocol interaction data (2025 API)'
+                'description': (
+                    'DeFi portfolio & protocol data; key from cloud.debank.com (probe uses AccessKey header)'
+                )
             },
             'oneinch': {
                 'name': '1inch API',
@@ -285,8 +622,19 @@ class APIServiceDashboard:
                 'rate_period': 1,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://api.1inch.dev/swap/v6.0/1/tokens',
+                'test_endpoint': 'https://api.1inch.com/swap/v6.0/1/tokens',
                 'description': 'DEX aggregation & best swap route optimization (2025 v6.0 API)'
+            },
+            'lifi': {
+                'name': 'LI.FI API',
+                'env_key': 'LI_FI_API_KEY',
+                'category': '🔄 DeFi Protocols',
+                'rate_limit': 60,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': 'https://li.quest/v1/chains',
+                'description': 'Cross-chain swap & bridge routing (LI.FI)'
             },
 
             # === SECURITY & COMPLIANCE ===
@@ -299,7 +647,7 @@ class APIServiceDashboard:
                 'last_call': 0,
                 'calls_count': 0,
                 'test_endpoint': 'https://api.breadcrumbs.one/risk/address',
-                'description': 'Sanctions & illicit-activity screening (2025 risk endpoint)'
+                'description': 'Sanctions & illicit-activity screening (risk endpoint)'
             },
             'certik': {
                 'name': 'CertiK API',
@@ -311,6 +659,57 @@ class APIServiceDashboard:
                 'calls_count': 0,
                 'test_endpoint': None,
                 'description': 'Smart contract security audits & vulnerability data'
+            },
+            'chainalysis_oracle': {
+                'name': 'Chainalysis Sanctions Oracle',
+                'env_key': None,
+                'category': '🛡️ Security & Compliance',
+                'rate_limit': 30,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': 'https://www.chainalysis.com/',
+                'description': 'Sanctions oracle reference & contract catalog (website reachability)'
+            },
+            'honeypot': {
+                'name': 'Honeypot.is API',
+                'env_key': None,
+                'category': '🛡️ Security & Compliance',
+                'rate_limit': 30,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': (
+                    'https://api.honeypot.is/v2/IsHoneypot?address='
+                    '0xdAC17F958D2ee523a2206206994597C13D831ec7&chainId=1'
+                ),
+                'description': 'Token honeypot / sell-tax simulation (public endpoint)'
+            },
+            'ofac_sls': {
+                'name': 'OFAC Sanctions List Service',
+                'env_key': None,
+                'category': '🛡️ Security & Compliance',
+                'rate_limit': 10,
+                'rate_period': 3600,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': (
+                    'https://sanctionslistservice.ofac.treas.gov/api/publicationpreview/exports/sdn.csv'
+                ),
+                'description': 'US Treasury OFAC SDN export (public CSV endpoint)'
+            },
+            'scamsniffer': {
+                'name': 'ScamSniffer Dataset',
+                'env_key': None,
+                'category': '🛡️ Security & Compliance',
+                'rate_limit': 20,
+                'rate_period': 3600,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': (
+                    'https://raw.githubusercontent.com/scamsniffer/scam-database/main/blacklist/address.json'
+                ),
+                'description': 'Community scam address blacklist (GitHub raw JSON)'
             },
 
             # === SOCIAL & SENTIMENT ===
@@ -367,7 +766,7 @@ class APIServiceDashboard:
                 'rate_period': 60,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://api.arkhamintelligence.com/intelligence/entity',
+                'test_endpoint': 'https://api.arkm.com/intelligence/address/0xdAC17F958D2ee523a2206206994597C13D831ec7',
                 'description': 'On-chain intelligence & entity identification'
             },
             'oklink': {
@@ -389,8 +788,11 @@ class APIServiceDashboard:
                 'rate_period': 60,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://api.gopluslabs.io/api/v1/address_security/0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                'description': 'Malicious address and smart-contract risk intelligence (basic endpoint with no API key)'
+                'test_endpoint': (
+                    'https://api.gopluslabs.io/api/v1/address_security/'
+                    '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+                ),
+                'description': 'Malicious address & contract risk intelligence (free public tier)'
             },
             'trmlabs': {
                 'name': 'TRM Labs Sanctions API',
@@ -401,18 +803,30 @@ class APIServiceDashboard:
                 'last_call': 0,
                 'calls_count': 0,
                 'test_endpoint': 'https://api.trmlabs.com/public/v1/sanctions/screening',
-                'description': 'Sanctions screening (works without key at default limit; API key optional for higher throughput)'
+                'description': 'Sanctions screening (optional API key for higher throughput)'
             },
             'chainabuse': {
                 'name': 'Chainabuse API',
                 'env_key': 'CHAINABUSE_API_KEY',
                 'category': '🔍 Intelligence & Research',
-                'rate_limit': 60,
-                'rate_period': 60,
+                'rate_limit': (
+                    5000
+                    if _chainabuse_partner_tier_enabled()
+                    else CHAINABUSE_STANDARD_MONTHLY_CALLS
+                ),
+                'rate_period': (
+                    3600
+                    if _chainabuse_partner_tier_enabled()
+                    else CHAINABUSE_STANDARD_MONTH_SECONDS
+                ),
+                'probe_request_budget': 1,
+                'probe_cooldown_seconds': _chainabuse_probe_spacing_seconds(),
                 'last_call': 0,
                 'calls_count': 0,
                 'test_endpoint': 'https://api.chainabuse.com/v0/reports',
-                'description': 'Community-reported crypto abuse incidents (API key required via Basic auth)'
+                'description': (
+                    'Shared abuse-report cache; standard API Center probe is local to preserve the 10/month quota.'
+                ),
             },
             'thegraph': {
                 'name': 'The Graph API',
@@ -422,7 +836,7 @@ class APIServiceDashboard:
                 'rate_period': 3600,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://gateway-arbitrum.network.thegraph.com/api/{}/subgraphs/id/DZz4kDTdmzWLWsV373w2bSmoar3umKKH9y82SUKr5qmp',
+                'test_endpoint': 'https://gateway.thegraph.com/api/{}/subgraphs/id/DZz4kDTdmzWLWsV373w2bSmoar3umKKH9y82SUKr5qmp',
                 'description': 'Decentralized protocol for indexing blockchain data'
             },
             'dune': {
@@ -433,8 +847,8 @@ class APIServiceDashboard:
                 'rate_period': 3600,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://api.dune.com/api/v1/queries/1/results',
-                'description': 'SQL-based blockchain data analytics, custom queries & real-time activity monitoring (2025 API)'
+                'test_endpoint': 'https://api.dune.com/api/v1/query/{}/results?limit=1',
+                'description': 'Dune Cloud SQL plus SIM EVM; use DUNE_USE_SIM_API or env defaults.',
             },
             'bitcointalk': {
                 'name': 'Bitcointalk Scraper',
@@ -499,10 +913,97 @@ class APIServiceDashboard:
                 'rate_period': 60,
                 'last_call': 0,
                 'calls_count': 0,
-                'test_endpoint': 'https://api.llama.fi/protocols',
+                # Small JSON probe (``/protocols`` often exceeds read timeouts on busy hosts).
+                'test_endpoint': (
+                    'https://coins.llama.fi/prices/current/'
+                    'ethereum:0xdAC17F958D2ee523a2206206994597C13D831ec7'
+                ),
                 'description': 'DeFi TVL, protocol data & yield farming info (Free)'
+            },
+            'defi_api': {
+                'name': 'De.Fi API',
+                'env_key': 'DEFI_API_KEY',
+                'category': '📊 Market Data',
+                'rate_limit': 60,
+                'rate_period': 60,
+                'last_call': 0,
+                'calls_count': 0,
+                'test_endpoint': 'https://public-api.de.fi/graphql',
+                'description': 'De.Fi GraphQL (Shield, Scanner, chain metadata); authenticate with X-Api-Key'
             }
         }
+        for sid, description in CUSTOMER_FACING_SERVICE_DESCRIPTIONS.items():
+            if sid in services:
+                services[sid]['description'] = description
+        return services
+
+    def _api_runtime_dir(self) -> str:
+        """Writable API runtime dir (matches web portal ``resolve_api_runtime_dir`` when env is set)."""
+        env_dir = str(os.environ.get("API_SERVICE_RUNTIME_DIR", "") or "").strip()
+        if env_dir:
+            return env_dir
+        return os.path.join(DATA_DIR, "api_runtime")
+
+    def load_service_toggles(self) -> None:
+        """Merge persisted enable/disable flags from ``service_toggles.json`` into ``self.services``."""
+        path = os.path.join(self._api_runtime_dir(), "service_toggles.json")
+        if not os.path.isfile(path):
+            return
+        try:
+            with open(path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return
+        raw = data.get("services", data) if isinstance(data, dict) else {}
+        if not isinstance(raw, dict):
+            return
+        for service_id, enabled in raw.items():
+            sid = str(service_id or "").strip().lower()
+            if sid in self.services:
+                self.services[sid]["enabled"] = bool(enabled)
+
+    def export_service_registry(self) -> None:
+        """Write ``api_services_registry.json`` for the web portal API Center (``load_service_registry``)."""
+        runtime = self._api_runtime_dir()
+        os.makedirs(runtime, exist_ok=True)
+        path = os.path.join(runtime, "api_services_registry.json")
+        services_out = []
+        for service_id, svc in self.services.items():
+            sid = str(service_id or "").strip().lower()
+            if not sid:
+                continue
+            row: dict = {
+                "id": sid,
+                "name": str(svc.get("name", sid)).strip() or sid,
+                "category": str(svc.get("category", "Other")).strip() or "Other",
+                "description": str(svc.get("description", "")).strip(),
+                "enabled": bool(svc.get("enabled", True)),
+                "env_key": svc.get("env_key"),
+                "reference_url": str(svc.get("reference_url", "") or "").strip(),
+            }
+            for probe_key in ("rate_limit", "rate_period", "probe_request_budget", "probe_cooldown_seconds"):
+                if probe_key not in svc:
+                    continue
+                val = svc.get(probe_key)
+                if val is None:
+                    continue
+                try:
+                    num = int(val)
+                except (TypeError, ValueError):
+                    continue
+                if num > 0:
+                    row[probe_key] = num
+            services_out.append(row)
+        payload = {
+            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "service_count": len(services_out),
+            "services": services_out,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2)
+        except OSError as exc:
+            print(f"Warning: could not export API service registry: {exc}")
         
     def create_widgets(self):
         """Create all dashboard widgets"""
@@ -646,7 +1147,7 @@ class APIServiceDashboard:
         if service['env_key']:
             api_key = os.getenv(service['env_key'])
             # Special case for CoinGecko - free tier doesn't require key
-            if not api_key and service_id not in ['coingecko', 'trmlabs']:
+            if not api_key and service_id not in ('coingecko', 'coincap'):
                 return 'unavailable', 'No API key configured'
             
             # Special case for Reddit - also check secondary key
@@ -744,7 +1245,317 @@ class APIServiceDashboard:
         thread = threading.Thread(target=self._fetch_service_data, args=(service_id,), daemon=True)
         thread.start()
     
-    def _fetch_service_data(self, service_id):
+    def _probe_format_response(self, service_id, service, response, last_request_exception):
+        """Map HTTP probe outcome to user-facing success flag and summary (API Center / dashboard)."""
+        success = False
+        message = ""
+        # Check response
+        if response is not None:
+            if response.status_code in (200, 201):
+                if service_id == 'oklink':
+                    try:
+                        payload = response.json()
+                        ok_code = str(payload.get('code', '')).strip()
+                        ok_msg = str(payload.get('msg', '')).strip()
+                    except Exception:
+                        ok_code = ''
+                        ok_msg = ''
+
+                    if ok_code and ok_code != '0':
+                        success = True
+                        message = f"⚠️ {service['name']}: API reachable but returned code {ok_code} ({ok_msg or 'see OKLink docs'})"
+                    else:
+                        success = True
+                        message = f"✅ Success: {service['name']} responded correctly"
+                elif service_id == 'defi_api':
+                    try:
+                        payload_json = response.json()
+                    except Exception:
+                        payload_json = {}
+                    errs = payload_json.get('errors') if isinstance(payload_json, dict) else None
+                    if errs:
+                        success = False
+                        message = f"❌ {service['name']}: GraphQL returned errors"
+                    else:
+                        success = True
+                        message = f"✅ Success: {service['name']} responded correctly"
+                elif service_id == 'dune':
+                    success = True
+                    rurl = str(getattr(response, "url", "") or "").lower()
+                    if "sim.dune.com" in rurl:
+                        message = (
+                            f"✅ Success: {service['name']} (SIM on api.sim.dune.com; matches DUNE_SIM_* usage)"
+                        )
+                    else:
+                        message = f"✅ Success: {service['name']} responded correctly"
+                else:
+                    success = True
+                    message = f"✅ Success: {service['name']} responded correctly"
+            elif (
+                response.status_code in [401, 402, 403, 404, 422, 429, 500, 550]
+                and service_id in [
+                    'moralis',
+                    'twitter',
+                    'zapper',
+                    'breadcrumbs',
+                    'reddit',
+                    'dune',
+                    'coinapi',
+                    'oklink',
+                    'chainabuse',
+                    'trmlabs',
+                    'birdeye',
+                    'lifi',
+                    'solanatracker',
+                    'solscan',
+                    'debank',
+                ]
+            ):
+                # For selected APIs, these statuses still confirm connectivity/auth endpoint health.
+                success = True
+                if service_id == 'moralis':
+                    message = f"✅ {service['name']}: Connection successful (free plan limit reached)"
+                elif service_id == 'zapper':
+                    if response.status_code == 500:
+                        message = f"⚠️ {service['name']}: GraphQL endpoint reachable (request shape rejected)"
+                    elif response.status_code == 404:
+                        message = f"⚠️ {service['name']}: Endpoint changed but service is reachable"
+                    else:
+                        message = f"✅ {service['name']}: Connection successful (API reachable)"
+                elif service_id == 'breadcrumbs':
+                    if response.status_code == 404:
+                        message = f"⚠️ {service['name']}: Endpoint not found on this host, service reachable"
+                    elif response.status_code == 403:
+                        message = f"⚠️ {service['name']}: Authentication rejected (check key/plan; Compliance API also needs BREADCRUMBS_API_SECRET)"
+                    elif response.status_code == 401:
+                        message = f"⚠️ {service['name']}: Unauthorized (verify key format and API host)"
+                    else:
+                        message = f"✅ {service['name']}: Connection successful (API reachable)"
+                elif service_id == 'reddit':
+                    message = f"✅ {service['name']}: Connection successful (OAuth2 endpoint reachable)"
+                elif service_id == 'dune':
+                    if response.status_code == 404:
+                        message = f"⚠️ {service['name']}: Query not found, but API is reachable"
+                    elif response.status_code == 429:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 429 — provider rate limit; "
+                            "wait and retry or reduce parallel probes)"
+                        )
+                    elif response.status_code == 401:
+                        message = (
+                            f"⚠️ {service['name']}: Unauthorized (HTTP 401) on api.dune.com after SIM "
+                            "fallback — key not accepted for Cloud or SIM; verify DUNE_API_KEY, "
+                            "DUNE_SIM_BASE_URL, DUNE_SIM_CHAIN_ID, or set DUNE_USE_SIM_API=1 for SIM-only"
+                        )
+                    elif response.status_code == 403:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 403 — plan, IP allowlist, or "
+                            "feature scope; key is accepted at the edge)"
+                        )
+                    elif response.status_code == 402:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 402 — billing/plan restriction)"
+                        )
+                    elif response.status_code == 422:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 422 — probe rejected; "
+                            "try DUNE_QUERY_ID or check Dune API changes)"
+                        )
+                    elif response.status_code in (500, 502, 503, 504):
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP {response.status_code} — "
+                            "Dune server error; retry later)"
+                        )
+                    elif response.status_code == 550:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 550 — provider-specific status; "
+                            "see Dune status/docs)"
+                        )
+                    else:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP {response.status_code}); "
+                            "if queries fail, verify DUNE_API_KEY in Dune settings"
+                        )
+                elif service_id == 'coinapi':
+                    if response.status_code == 550:
+                        message = f"⚠️ {service['name']}: API key accepted but plan/credits limit reached"
+                    elif response.status_code == 429:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 429 — provider rate limit or quota; "
+                            "key is accepted at the edge)"
+                        )
+                    elif response.status_code == 401:
+                        message = (
+                            f"⚠️ {service['name']}: Unauthorized (HTTP 401 — invalid COINAPI_API_KEY)"
+                        )
+                    elif response.status_code == 403:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 403 — subscription/plan or "
+                            "endpoint not enabled; key is accepted at the edge)"
+                        )
+                    elif response.status_code == 402:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 402 — payment/plan restriction)"
+                        )
+                    elif response.status_code == 404:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 404 — probe path returned "
+                            "not found; check CoinAPI product URL)"
+                        )
+                    elif response.status_code == 422:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 422 — request not applicable "
+                            "to this key/plan)"
+                        )
+                    elif response.status_code in (500, 502, 503, 504):
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP {response.status_code} — "
+                            "CoinAPI server error; retry later)"
+                        )
+                    else:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP {response.status_code}); "
+                            "if market data fails, verify COINAPI_API_KEY and plan"
+                        )
+                elif service_id == 'oklink':
+                    if response.status_code == 429:
+                        message = f"⚠️ {service['name']}: Rate limited (check request frequency)"
+                    else:
+                        message = f"⚠️ {service['name']}: Authentication/authorization issue (check OKLINK_API_KEY)"
+                elif service_id == 'twitter' and response.status_code == 429:
+                    message = f"✅ {service['name']}: Connection successful (rate limited)"
+                elif service_id == 'twitter':
+                    message = f"✅ {service['name']}: Connection successful (API reachable)"
+                elif service_id == 'chainabuse':
+                    if response.status_code in [400, 404, 422]:
+                        message = f"⚠️ {service['name']}: Endpoint reachable (request parameters rejected)"
+                    elif response.status_code == 429:
+                        message = (
+                            f"⚠️ {service['name']}: HTTP 429 — ChainAbuse monthly quota/rate window is exhausted. "
+                            "The risk engine now uses the shared 365-day cache and 50-token queue, so avoid "
+                            "manual live probes on standard keys; wait for the provider reset or use a partner key."
+                        )
+                    elif response.status_code == 401:
+                        hint = _chainabuse_json_error_hint(response)
+                        hint_txt = f" {hint}" if hint else ""
+                        message = (
+                            f"⚠️ {service['name']}: HTTP 401{hint_txt}. Chainabuse documents this as "
+                            "wrong or missing API credentials — regenerate the key (Profile → Settings → API), "
+                            "paste the raw value into CHAINABUSE_API_KEY (no quotes/BOM), and set "
+                            "CHAINABUSE_BASE_URL to https://api.chainabuse.com or …/v0 only."
+                        )
+                    elif response.status_code == 403:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 403 — plan, scope, or "
+                            "provider policy; key may still be valid)"
+                        )
+                    elif response.status_code == 402:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP 402 — billing/plan restriction)"
+                        )
+                    elif response.status_code in (500, 502, 503, 504):
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP {response.status_code} — "
+                            "ChainAbuse server error; retry later)"
+                        )
+                    else:
+                        message = (
+                            f"✅ {service['name']}: API reachable (HTTP {response.status_code}); "
+                            "if reports fail, verify CHAINABUSE_API_KEY in ChainAbuse console"
+                        )
+                elif service_id == 'trmlabs':
+                    if response.status_code in [400, 404, 422]:
+                        message = f"⚠️ {service['name']}: Endpoint reachable (request parameters rejected)"
+                    elif response.status_code == 429:
+                        message = f"⚠️ {service['name']}: Rate limited"
+                    else:
+                        message = f"⚠️ {service['name']}: Authentication issue (check TRMLABS_API_KEY)"
+                elif service_id == 'birdeye':
+                    message = f"⚠️ {service['name']}: Authentication or plan issue (check BIRDEYE_API_KEY)"
+                elif service_id == 'lifi':
+                    message = f"⚠️ {service['name']}: Authentication issue (check LI_FI_API_KEY)"
+                elif service_id == 'solanatracker':
+                    message = f"⚠️ {service['name']}: Authentication issue (check SOLANATRACKER_API_KEY)"
+                elif service_id == 'solscan':
+                    message = (
+                        f"⚠️ {service['name']}: Authentication failed on public-api "
+                        '(check SOLSCAN_API_KEY; use SOLSCAN_PROBE_USE_PRO_API=1 only for Solscan Pro keys)'
+                    )
+                elif service_id == 'debank':
+                    message = (
+                        f"⚠️ {service['name']}: Not authorized — use an access key from "
+                        'https://cloud.debank.com and set DEBANK_API_KEY (header AccessKey).'
+                    )
+            elif service_id == 'defi_api' and response.status_code in (502, 503, 504):
+                # De.Fi / CDN often returns HTML 502; not indicative of an invalid DEFI_API_KEY.
+                success = True
+                message = (
+                    f"⚠️ {service['name']}: HTTP {response.status_code} from De.Fi or edge "
+                    "(Bad Gateway / temporarily unavailable — does not prove DEFI_API_KEY is wrong); "
+                    "retry later or set DEFI_GRAPHQL_URL if your plan uses a custom host"
+                )
+            else:
+                success = False
+                message = f"❌ Error: {service['name']} returned {response.status_code}"
+                if hasattr(response, 'text') and response.text:
+                    error_text = response.text[:200]  # First 200 chars of error message
+                    # Special handling for common API issues
+                    if service_id == 'moralis' and 'usage has been consumed' in error_text:
+                        message = f"⚠️ {service['name']}: Free plan daily usage exceeded"
+                    elif service_id == 'zapper' and ('Missing API key' in error_text or 'Forbidden' in error_text or 'Unauthorized' in error_text):
+                        message = f"✅ {service['name']}: Connection successful (verify authentication)"
+                    elif service_id == 'arkham' and ('Invalid API key' in error_text or 'Unauthorized' in error_text or 'forbidden' in error_text.lower()):
+                        message = f"✅ {service['name']}: Connection successful (verify API key)"
+                    elif service_id == 'arkham' and ('not found' in error_text.lower() or '404' in error_text):
+                        message = f"✅ {service['name']}: Connection successful (endpoint may have changed)"
+                    elif service_id == 'arkham' and ('rate limit' in error_text.lower() or '429' in error_text):
+                        message = f"✅ {service['name']}: Connection successful (rate limited)"
+                    elif service_id == 'arkham' and ('not configured' in error_text.lower()):
+                        message = f"⚠️ {service['name']}: API key not configured - add ARKHAM_API_KEY to .env file"
+                    elif service_id == 'arkham' and ('invalid api key' in error_text.lower()):
+                        message = f"⚠️ {service['name']}: Invalid API key - check your ARKHAM_API_KEY"
+                    elif service_id == 'breadcrumbs' and ('Unauthorized' in error_text or 'Forbidden' in error_text):
+                        message = f"✅ {service['name']}: Connection successful (verify API key)"
+                    elif service_id == 'oklink' and ('50011' in error_text or 'too many requests' in error_text.lower()):
+                        message = f"⚠️ {service['name']}: Rate limit exceeded"
+                    elif service_id == 'oklink' and ('50014' in error_text or 'invalid authorization' in error_text.lower()):
+                        message = f"⚠️ {service['name']}: Invalid authorization (check OKLINK_API_KEY)"
+                    elif service_id == 'twitter' and ('Unsupported Authentication' in error_text or 'forbidden' in error_text.lower() or 'Too Many Requests' in error_text):
+                        message = f"✅ {service['name']}: Connection successful (API reachable)"
+                    elif service_id == 'reddit' and ('Unauthorized' in error_text or 'invalid_grant' in error_text):
+                        message = f"✅ {service['name']}: Connection successful (OAuth2 endpoint reachable)"
+                    elif 'unauthorized' in error_text.lower() or 'invalid api key' in error_text.lower():
+                        message = f"❌ {service['name']}: Invalid API key"
+                    elif service_id == 'defi_api' and '<html' in error_text.lower():
+                        message = (
+                            f"⚠️ {service['name']}: HTTP {response.status_code} returned an HTML error page "
+                            "(proxy or upstream); check DEFI_GRAPHQL_URL or retry — body omitted"
+                        )
+                        success = True
+                    else:
+                        message += f" - {error_text}"
+        else:
+            success = False
+            if service_id == 'trmlabs' and last_request_exception:
+                err = str(last_request_exception).lower()
+                if (
+                    'failed to resolve' in err
+                    or 'name or service not known' in err
+                    or 'nodename nor servname provided' in err
+                    or 'temporary failure in name resolution' in err
+                ):
+                    message = (
+                        f"⚠️ {service['name']}: Endpoint hostname is not resolvable "
+                        "(set TRMLABS_SANCTIONS_ENDPOINT if TRM provided a custom host)."
+                    )
+                    success = True
+                else:
+                    message = f"❌ Error: {service['name']} failed to get a response ({last_request_exception})"
+            else:
+                message = f"❌ Error: {service['name']} failed to get a response"
+        return success, message
+
+    def _fetch_service_data(self, service_id):  # pyright: ignore[reportGeneralTypeIssues]
         """Fetch data from a specific service in background"""
         service = self.services[service_id]
         widgets = self.service_widgets[service_id]
@@ -753,10 +1564,8 @@ class APIServiceDashboard:
             success = False
             
             if service['test_endpoint']:
-                # Load environment variables
-                from dotenv import load_dotenv
-                load_dotenv('/Users/amlfreak/Desktop/venv/.env')
-                
+                _load_env_for_probes()
+
                 # Make test API call
                 headers = {}
                 url = service['test_endpoint']
@@ -767,12 +1576,11 @@ class APIServiceDashboard:
                 success = False
                 message = ""
                 last_request_exception = None
-                
+
                 if service['env_key']:
                     api_key = os.getenv(service['env_key'])
-                if service_id == 'trmlabs' and not api_key:
-                    # Backward-compatible alias seen in older env files.
-                    api_key = os.getenv('TRM_LABS_API_KEY')
+                    if service_id == 'debank' and not (api_key or '').strip():
+                        api_key = os.getenv('DEBANK_ACCESS_KEY')
                 
                 if service_id == 'infura' and api_key:
                     # Replace {api_key} placeholder in URL
@@ -799,25 +1607,250 @@ class APIServiceDashboard:
                     }
                     headers['Content-Type'] = 'application/json'
                     response = requests.post(url, json=payload, headers=headers, timeout=10)
-                    
-                elif api_key or service_id == 'trmlabs':
+
+                elif service_id == 'defi_api':
+                    api_key = os.getenv('DEFI_API_KEY', '').strip()
+                    graphql_url = (
+                        os.getenv('DEFI_GRAPHQL_URL', '').strip()
+                        or url
+                        or 'https://public-api.de.fi/graphql'
+                    ).rstrip('/')
+                    if not api_key:
+                        message = (
+                            f"⚠️ {service['name']}: DEFI_API_KEY is not set. "
+                            "Add it under Settings → Credentials, or in web_portal.env / "
+                            "/etc/hodler-suite/web_portal.env (audit loads the vault when "
+                            "CREDENTIALS_VAULT_PATH and VAULT_MASTER_PASSWORD are set)."
+                        )
+                        success = True
+                        self.root.after(0, self._update_fetch_result, service_id, success, message)
+                        return
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Api-Key': api_key,
+                    }
+                    payload = {'query': 'query { chains { id name } }'}
+                    response = requests.post(graphql_url, json=payload, headers=headers, timeout=12)
+
+                elif service_id == 'solscan':
+                    token = (
+                        os.getenv('SOLSCAN_API_KEY')
+                        or os.getenv('SOLSCAN_PRO_API_KEY')
+                        or ''
+                    ).strip()
+                    probe_pro = str(
+                        os.getenv('SOLSCAN_PROBE_USE_PRO_API') or os.getenv('SOLSCAN_USE_PRO_API') or ''
+                    ).strip().lower() in {'1', 'true', 'yes', 'on'}
+                    if token and probe_pro:
+                        # Paid Pro API (v2); not used for free-tier keys from API Management.
+                        response = requests.get(
+                            'https://pro-api.solscan.io/v2.0/token/meta',
+                            headers={'token': token, 'Accept': 'application/json'},
+                            params={'address': 'So11111111111111111111111111111111111111112'},
+                            timeout=12,
+                        )
+                    elif token:
+                        # Free / standard keys: same ``token`` header on the public host (not pro-api).
+                        response = requests.get(
+                            'https://public-api.solscan.io/chaininfo',
+                            headers={'token': token, 'Accept': 'application/json'},
+                            timeout=12,
+                        )
+                    else:
+                        response = requests.get(
+                            'https://public-api.solscan.io/chaininfo',
+                            headers={'Accept': 'application/json'},
+                            timeout=10,
+                        )
+
+                elif service_id == 'trmlabs':
+                    trm_key = (os.getenv('TRMLABS_API_KEY') or os.getenv('TRM_LABS_API_KEY') or '').strip()
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    }
+                    if trm_key:
+                        headers['x-api-key'] = trm_key
+                    test_address = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+                    payload = [{'address': test_address}]
+                    base_url = service.get('test_endpoint') or 'https://api.trmlabs.com/public/v1/sanctions/screening'
+                    override_endpoint = (os.getenv('TRMLABS_SANCTIONS_ENDPOINT') or '').strip()
+                    if override_endpoint:
+                        if override_endpoint.startswith('http'):
+                            normalized_override = override_endpoint.rstrip('/')
+                        else:
+                            normalized_override = f"https://{override_endpoint.strip('/')}"
+                        if not normalized_override.endswith('/public/v1/sanctions/screening'):
+                            normalized_override = f"{normalized_override}/public/v1/sanctions/screening"
+                    else:
+                        normalized_override = ''
+                    candidate_urls = [
+                        normalized_override or base_url,
+                        'https://api.trmlabs.com/public/v1/sanctions/screening',
+                        'https://sanctions.trmlabs.com/public/v1/sanctions/screening',
+                        'https://api.sanctions.trmlabs.com/public/v1/sanctions/screening',
+                    ]
+                    candidate_urls = list(dict.fromkeys(candidate_urls))
+                    response = None
+                    best_response = None
+                    for candidate_url in candidate_urls:
+                        try:
+                            candidate_response = requests.post(
+                                candidate_url,
+                                headers=headers,
+                                json=payload,
+                                timeout=12,
+                            )
+                        except requests.RequestException as req_exc:
+                            last_request_exception = req_exc
+                            continue
+                        if candidate_response.status_code in [200, 201]:
+                            response = candidate_response
+                            break
+                        if (
+                            best_response is None
+                            or candidate_response.status_code in [400, 401, 403, 404, 422, 429]
+                        ):
+                            best_response = candidate_response
+                        if candidate_response.status_code in [400, 401, 403, 404, 405, 422, 429]:
+                            continue
+                        response = candidate_response
+                        break
+                    if response is None:
+                        response = best_response
+
+                elif service_id == 'coincap':
+                    cap_key = str(os.getenv('COINCAP_API_KEY') or '').strip()
+                    response = None
+                    last_coincap_exc = None
+                    if cap_key:
+                        try:
+                            response = requests.get(
+                                'https://rest.coincap.io/v3/assets',
+                                headers={
+                                    'Accept': 'application/json',
+                                    'Authorization': f'Bearer {cap_key}',
+                                },
+                                params={'limit': '1'},
+                                timeout=12,
+                            )
+                        except requests.RequestException as exc:
+                            last_coincap_exc = exc
+                            response = None
+                    if response is None or (
+                        response is not None and response.status_code in (401, 403)
+                    ):
+                        urls = [
+                            'https://api.coincap.io/v2/assets?limit=1',
+                            'https://rest.coincap.io/v3/assets?limit=1',
+                        ]
+                        for cand in urls:
+                            try:
+                                response = requests.get(
+                                    cand,
+                                    headers={'Accept': 'application/json'},
+                                    timeout=12,
+                                )
+                                if response.status_code == 200:
+                                    break
+                            except requests.RequestException as exc:
+                                last_coincap_exc = exc
+                                response = None
+                                continue
+                    if response is None and last_coincap_exc is not None:
+                        err_l = str(last_coincap_exc).lower()
+                        if any(
+                            x in err_l
+                            for x in (
+                                'resolve',
+                                'name or service not known',
+                                'nodename nor servname',
+                                'gaierror',
+                                'temporary failure in name resolution',
+                            )
+                        ):
+                            message = (
+                                f"⚠️ {service['name']}: Cannot reach API ({last_coincap_exc!s}). "
+                                'This is often DNS or outbound HTTPS blocking on the audit host.'
+                            )
+                            success = True
+                            self.root.after(0, self._update_fetch_result, service_id, success, message)
+                            return
+                        message = f"❌ Error: {service['name']} - {last_coincap_exc!s}"
+                        success = False
+                        self.root.after(0, self._update_fetch_result, service_id, success, message)
+                        return
+
+                elif api_key:
                     # Handle other services with API keys
                     if service_id == 'moralis':
                         headers['X-API-Key'] = api_key
+                    elif service_id == 'birdeye':
+                        headers['x-api-key'] = api_key.strip()
+                        headers['Accept'] = 'application/json'
+                        response = requests.get(url, headers=headers, timeout=12)
+                    elif service_id == 'lifi':
+                        headers['accept'] = 'application/json'
+                        headers['x-lifi-api-key'] = api_key.strip()
+                        response = requests.get('https://li.quest/v1/chains', headers=headers, timeout=12)
+                    elif service_id == 'solanatracker':
+                        headers['x-api-key'] = api_key.strip()
+                        headers['Accept'] = 'application/json'
+                        response = requests.get(url, headers=headers, timeout=12)
+                    elif service_id == 'debank':
+                        access_key = api_key.strip()
+                        headers['AccessKey'] = access_key
+                        headers['Accept'] = 'application/json'
+                        response = requests.get(url, headers=headers, timeout=12)
                     elif service_id == 'coinmarketcap':
                         headers['X-CMC_PRO_API_KEY'] = api_key
                         headers['Accept'] = 'application/json'
                     elif service_id == 'coinapi':
                         normalized_key = api_key.strip()
-                        headers['X-CoinAPI-Key'] = normalized_key
-                        headers['Accept'] = 'application/json'
+                        coin_headers = {
+                            'X-CoinAPI-Key': normalized_key,
+                            'Accept': 'application/json',
+                        }
+                        try:
+                            response = requests.get(url, headers=coin_headers, timeout=12)
+                        except requests.RequestException:
+                            response = None
+                        if response is not None and response.status_code not in (200, 201):
+                            try:
+                                alt = requests.get(
+                                    'https://rest.coinapi.io/v1/assets',
+                                    headers=coin_headers,
+                                    params={'limit': '1'},
+                                    timeout=12,
+                                )
+                            except requests.RequestException:
+                                alt = None
+                            if alt is not None and alt.status_code in (200, 201):
+                                response = alt
                     elif service_id == 'covalent':
                         # Covalent uses API key in URL, not headers
                         url = f"{url}?key={api_key}"
                     elif service_id == 'zapper':
-                        # Zapper v2 REST endpoint with API key header
-                        headers['X-Zapper-API-Key'] = api_key
-                        response = requests.get(url, headers=headers, timeout=10)
+                        normalized_key = api_key.strip()
+                        headers['x-zapper-api-key'] = normalized_key
+                        headers['Content-Type'] = 'application/json'
+                        payload = {
+                            "query": (
+                                "query PortfolioV2($addresses: [Address!]!, $networks: [Network!]) { "
+                                "portfolioV2(addresses: $addresses, networks: $networks) { "
+                                "tokenBalances { byToken { edges { node { symbol } } } } } }"
+                            ),
+                            "variables": {
+                                "addresses": ["0xdAC17F958D2ee523a2206206994597C13D831ec7"],
+                                "networks": ["ETHEREUM_MAINNET"]
+                            }
+                        }
+                        try:
+                            response = requests.post(url, json=payload, headers=headers, timeout=15)
+                        except requests.RequestException:
+                            fallback_headers = {'X-Zapper-API-Key': normalized_key}
+                            response = requests.get('https://api.zapper.xyz/v2/prices', headers=fallback_headers, timeout=10)
                     elif service_id == 'oneinch':
                         headers['Authorization'] = f'Bearer {api_key}'
                     elif service_id == 'twitter':
@@ -850,15 +1883,112 @@ class APIServiceDashboard:
                         }
                         response = requests.post(url, json=payload, headers=headers, timeout=10)
                     elif service_id == 'breadcrumbs':
-                        headers['X-API-KEY'] = api_key
-                        headers['Accept'] = 'application/json'
-                        # Test with a real USDT address using updated risk endpoint
+                        normalized_key = api_key.strip()
+                        breadcrumbs_secret = (os.getenv('BREADCRUMBS_API_SECRET') or '').strip()
                         test_address = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-                        params = {
-                            'chain': 'ETH',
-                            'address': test_address
-                        }
-                        response = requests.get(url, headers=headers, params=params, timeout=10)
+                        response = None
+                        best_response = None
+                        try:
+                            primary = requests.post(
+                                'https://api.breadcrumbs.one/sanctioned_address',
+                                headers={'X-API-KEY': normalized_key, 'Accept': 'application/json'},
+                                json=[{'chain': 'ETH', 'address': test_address}],
+                                timeout=10,
+                            )
+                        except requests.RequestException:
+                            primary = None
+                        if primary is not None and primary.status_code == 200:
+                            response = primary
+                        else:
+                            if primary is not None:
+                                best_response = primary
+                            candidate_requests = [
+                                (
+                                    'https://api.breadcrumbs.one/risk/address',
+                                    {'X-API-KEY': normalized_key, 'Accept': 'application/json'},
+                                    {'chain': 'ETH', 'address': test_address},
+                                ),
+                                (
+                                    'https://api.breadcrumbs.one/sanctions/address',
+                                    {'X-API-KEY': normalized_key, 'Accept': 'application/json'},
+                                    {'chain': 'ETH', 'address': test_address},
+                                ),
+                                (
+                                    f'https://api.breadcrumbs.app/v2/address/{test_address}/risk-score',
+                                    {'Authorization': f'Bearer {normalized_key}', 'Accept': 'application/json'},
+                                    {'chain': 'ETH'},
+                                ),
+                                (
+                                    f'https://api.breadcrumbs.app/v2/address/{test_address}/risk-score',
+                                    {'X-API-KEY': normalized_key, 'Accept': 'application/json'},
+                                    {'chain': 'ETH'},
+                                ),
+                            ]
+                            if breadcrumbs_secret:
+                                nonce = str(int(time.time() * 1000))
+                                compliance_path = f'/api/risk/address?chain=ETH&address={test_address}'
+                                compliance_url = f'https://apicompliance.breadcrumbs.app{compliance_path}'
+                                signature_payloads = [
+                                    f'{nonce}{compliance_url}',
+                                    f'{nonce}{compliance_path}',
+                                    f'{nonce}GET{compliance_url}',
+                                    f'{nonce}GET{compliance_path}',
+                                ]
+                                for signature_payload in dict.fromkeys(signature_payloads):
+                                    signature = hmac.new(
+                                        breadcrumbs_secret.encode('utf-8'),
+                                        signature_payload.encode('utf-8'),
+                                        hashlib.sha256
+                                    ).hexdigest()
+                                    candidate_requests.append(
+                                        (
+                                            compliance_url,
+                                            {
+                                                'X-API-Key': normalized_key,
+                                                'X-API-Nonce': nonce,
+                                                'X-API-Signature': signature,
+                                                'Accept': 'application/json',
+                                            },
+                                            {},
+                                        )
+                                    )
+                            for candidate_url, candidate_headers, candidate_params in candidate_requests:
+                                try:
+                                    candidate_response = requests.get(
+                                        candidate_url,
+                                        headers=candidate_headers,
+                                        params=candidate_params,
+                                        timeout=10,
+                                    )
+                                except requests.RequestException:
+                                    continue
+
+                                if candidate_response.status_code == 200:
+                                    response = candidate_response
+                                    break
+
+                                if (
+                                    best_response is None
+                                    or candidate_response.status_code in [401, 403, 429]
+                                ):
+                                    best_response = candidate_response
+
+                                if candidate_response.status_code in [401, 403, 404, 405, 429]:
+                                    continue
+
+                                response = candidate_response
+                                break
+
+                            if response is None:
+                                response = best_response
+                    elif service_id == 'oklink':
+                        normalized_key = api_key.strip()
+                        headers['Ok-Access-Key'] = normalized_key
+                        headers['Accept'] = 'application/json'
+                        headers['Content-Type'] = 'application/json'
+                        response = requests.get(
+                            url, headers=headers, timeout=_probe_http_timeout_seconds(service_id)
+                        )
                     elif service_id == 'discord':
                         headers['Authorization'] = f'Bot {api_key}'
                     elif service_id == 'telegram':
@@ -869,13 +1999,20 @@ class APIServiceDashboard:
                             # Test Arkham API directly with proper headers
                             api_key = os.getenv('ARKHAM_API_KEY')
                             if api_key:
+                                normalized_key = api_key.strip()
+                                if normalized_key.lower().startswith('bearer '):
+                                    normalized_key = normalized_key.split(' ', 1)[1].strip()
                                 headers = {
-                                    'API-Key': api_key,
+                                    'API-Key': normalized_key,
                                     'X-Timestamp': str(int(time.time() * 1_000_000))
                                 }
                                 test_address = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-                                url = f"https://api.arkhamintelligence.com/intelligence/address/{test_address}"
-                                response = requests.get(url, headers=headers, timeout=10)
+                                url = f"https://api.arkm.com/intelligence/address/{test_address}"
+                                response = requests.get(
+                                    url,
+                                    headers=headers,
+                                    timeout=_probe_http_timeout_seconds(service_id),
+                                )
                             else:
                                 response = None
                                 
@@ -891,99 +2028,254 @@ class APIServiceDashboard:
                         }
                         response = requests.post(url, json=payload, headers=headers, timeout=10)
                     elif service_id == 'dune':
-                        headers['X-Dune-API-Key'] = api_key
-                        headers['Content-Type'] = 'application/json'
-                        # Updated queries endpoint supports GET for cached results
-                        response = requests.get(url, headers=headers, timeout=10)
-                    elif service_id == 'oklink':
                         normalized_key = api_key.strip()
-                        headers['Ok-Access-Key'] = normalized_key
-                        headers['Accept'] = 'application/json'
-                        headers['Content-Type'] = 'application/json'
-                        response = requests.get(url, headers=headers, timeout=10)
-                    elif service_id == 'trmlabs':
-                        normalized_key = (api_key or '').strip()
-                        if normalized_key:
-                            headers['x-api-key'] = normalized_key
-                        headers['Content-Type'] = 'application/json'
-                        headers['Accept'] = 'application/json'
-                        test_address = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-                        payload = [{'address': test_address}]
-                        override_endpoint = (os.getenv('TRMLABS_SANCTIONS_ENDPOINT') or '').strip()
-                        if override_endpoint:
-                            if override_endpoint.startswith('http'):
-                                normalized_override = override_endpoint.rstrip('/')
-                            else:
-                                normalized_override = f"https://{override_endpoint.strip('/')}"
-                            if not normalized_override.endswith('/public/v1/sanctions/screening'):
-                                normalized_override = f"{normalized_override}/public/v1/sanctions/screening"
+
+                        def _dune_env_truthy(var_name: str) -> bool:
+                            val = (os.getenv(var_name) or "").strip().lower()
+                            return val in ("1", "true", "yes", "on")
+
+                        sim_base = (os.getenv("DUNE_SIM_BASE_URL") or "https://api.sim.dune.com/v1").strip().rstrip(
+                            "/"
+                        )
+                        sim_chain = (os.getenv("DUNE_SIM_CHAIN_ID") or "1").strip()
+                        if not sim_chain.isdigit():
+                            sim_chain = "1"
+                        test_tok = (
+                            os.getenv("DUNE_TEST_TOKEN_ADDRESS") or "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+                        ).strip()
+                        if not (test_tok.startswith("0x") and len(test_tok) == 42):
+                            test_tok = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+
+                        def _dune_sim_probe():
+                            """Try several SIM EVM routes (matches Dune console: token info, activity, etc.)."""
+                            sim_headers = {
+                                "Accept": "application/json",
+                                "X-Sim-Api-Key": normalized_key,
+                            }
+                            probe_wallet = (
+                                (os.getenv("DUNE_SIM_PROBE_WALLET") or "").strip()
+                                or "0xd8dA6BF26964af9D7eed9e03e53415D37aa96045"
+                            )
+                            last_resp = None
+                            sim_candidates = [
+                                (
+                                    f"{sim_base}/evm/token-info/{test_tok}",
+                                    {"chain_ids": sim_chain, "limit": 1},
+                                ),
+                                (
+                                    f"{sim_base}/evm/activity/{test_tok}",
+                                    {"chain_ids": sim_chain, "limit": 1},
+                                ),
+                                (
+                                    f"{sim_base}/evm/token-holders/{sim_chain}/{test_tok}",
+                                    {"limit": 1},
+                                ),
+                                (
+                                    f"{sim_base}/evm/balances/{probe_wallet}",
+                                    {"chain_ids": sim_chain, "limit": 1},
+                                ),
+                                (
+                                    f"{sim_base}/evm/transactions/{probe_wallet}",
+                                    {"chain_ids": sim_chain, "limit": 1},
+                                ),
+                            ]
+                            for sim_url, params in sim_candidates:
+                                try:
+                                    last_resp = requests.get(
+                                        sim_url,
+                                        headers=sim_headers,
+                                        params=params,
+                                        timeout=12,
+                                    )
+                                except requests.RequestException:
+                                    last_resp = None
+                                    continue
+                                if last_resp is not None and last_resp.status_code in (200, 201):
+                                    return last_resp
+                            return last_resp
+
+                        use_sim_only = _dune_env_truthy("DUNE_USE_SIM_API")
+                        dune_headers_prod = {
+                            "Accept": "application/json",
+                            "Content-Type": "application/json",
+                            "X-Dune-API-Key": normalized_key,
+                        }
+                        response = None
+                        best_response = None
+
+                        if use_sim_only:
+                            response = _dune_sim_probe()
                         else:
-                            normalized_override = ''
-                        candidate_urls = [
-                            normalized_override or url,
-                            'https://api.trmlabs.com/public/v1/sanctions/screening',
-                            'https://sanctions.trmlabs.com/public/v1/sanctions/screening',
-                            'https://api.sanctions.trmlabs.com/public/v1/sanctions/screening',
-                        ]
-                        candidate_urls = list(dict.fromkeys(candidate_urls))
-                        response = None
-                        best_response = None
-                        for candidate_url in candidate_urls:
+                            # Prefer production Dune Cloud usage (SQL / analytics keys).
                             try:
-                                candidate_response = requests.post(
-                                    candidate_url,
-                                    headers=headers,
-                                    json=payload,
-                                    timeout=12
+                                usage_resp = requests.post(
+                                    "https://api.dune.com/api/v1/usage",
+                                    headers=dune_headers_prod,
+                                    json={},
+                                    timeout=12,
                                 )
-                            except requests.RequestException as req_exc:
-                                last_request_exception = req_exc
-                                continue
-                            if candidate_response.status_code in [200, 201]:
-                                response = candidate_response
-                                break
-                            if (
-                                best_response is None
-                                or candidate_response.status_code in [400, 401, 403, 404, 422, 429]
-                            ):
-                                best_response = candidate_response
-                            if candidate_response.status_code in [400, 401, 403, 404, 405, 422, 429]:
-                                continue
-                            response = candidate_response
-                            break
-                        if response is None:
-                            response = best_response
+                            except requests.RequestException:
+                                usage_resp = None
+                            if usage_resp is not None and usage_resp.status_code in (200, 201):
+                                response = usage_resp
+                            elif usage_resp is not None and usage_resp.status_code == 429:
+                                # Do not hammer query endpoints after a global rate limit on usage.
+                                response = usage_resp
+                            else:
+                                if usage_resp is not None:
+                                    if best_response is None or usage_resp.status_code in [401, 403, 429]:
+                                        best_response = usage_resp
+                            if response is None:
+                                probe_headers = {
+                                    "X-Dune-API-Key": normalized_key,
+                                    "Accept": "application/json",
+                                }
+                                dune_query_id = (os.getenv("DUNE_QUERY_ID") or "").strip()
+                                query_candidates = []
+                                if dune_query_id.isdigit():
+                                    query_candidates.append(dune_query_id)
+                                # Stable defaults when DUNE_QUERY_ID is unset or invalid.
+                                query_candidates.extend(["3373921", "1"])
+                                query_candidates = list(dict.fromkeys(query_candidates))
+
+                                dune_urls = []
+                                for qid in query_candidates:
+                                    dune_urls.append(f"https://api.dune.com/api/v1/query/{qid}/results?limit=1")
+                                    dune_urls.append(f"https://api.dune.com/api/v1/queries/{qid}/results?limit=1")
+
+                                # Cap attempts: a full audit already touches many providers; bursty GETs
+                                # here often return 429 even when the key is valid.
+                                for dune_url in dune_urls[:3]:
+                                    try:
+                                        candidate_response = requests.get(
+                                            dune_url, headers=probe_headers, timeout=15
+                                        )
+                                    except requests.RequestException:
+                                        continue
+
+                                    if candidate_response.status_code == 200:
+                                        response = candidate_response
+                                        break
+
+                                    if (
+                                        best_response is None
+                                        or candidate_response.status_code in [401, 403, 429]
+                                    ):
+                                        best_response = candidate_response
+
+                                    # Query IDs frequently 404; continue until we hit a known good endpoint.
+                                    if candidate_response.status_code in [401, 403, 404, 429]:
+                                        continue
+
+                                    response = candidate_response
+                                    break
+
+                                if response is None:
+                                    response = best_response
+
+                            # SIM-only keys are rejected on api.dune.com (HTTP 401). Align with
+                            # ``defi_complete_risk_assessment_clean`` (X-Sim-Api-Key + api.sim.dune.com).
+                            if response is not None and response.status_code == 401:
+                                sim_r = _dune_sim_probe()
+                                if sim_r is not None and sim_r.status_code in (200, 201):
+                                    response = sim_r
                     elif service_id == 'chainabuse':
-                        normalized_key = api_key.strip()
-                        headers['Accept'] = 'application/json'
-                        test_address = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-                        param_candidates = [
-                            {'address': test_address, 'page': 1, 'perPage': 1},
-                            {'address': test_address, 'page': 1, 'per_page': 1},
-                            {'domain': 'chainabuse.com', 'page': 1, 'perPage': 1},
+                        if not _chainabuse_live_probe_enabled():
+                            success = True
+                            message = _chainabuse_local_probe_message(service['name'])
+                            self.root.after(0, self._update_fetch_result, service_id, success, message)
+                            return
+
+                        # Standard ChainAbuse keys only get 10 calls/month, so keep the probe to
+                        # the canonical reports endpoint and avoid cycling through auth schemes.
+                        minimal_params = {"page": 1, "perPage": 1}
+                        chainabuse_url = _chainabuse_reports_url()
+                        basic_dual = _chainabuse_basic_authorization_header_dual(api_key)
+                        basic_empty = _chainabuse_basic_authorization_header(api_key)
+                        base_headers = {
+                            "Accept": "application/json",
+                            "User-Agent": "HodlerSuite-APIAudit/1.0 (+https://hodler-suite.com)",
+                        }
+
+                        def _ch(extra_headers: dict) -> dict:
+                            merged = dict(base_headers)
+                            merged.update(extra_headers)
+                            return merged
+
+                        # Current docs require the API key in both Basic username and password.
+                        # ``KEY:`` remains as a single fallback for older deployments.
+                        attempts = [
+                            {
+                                "headers": _ch({"Authorization": basic_dual}),
+                                "params": dict(minimal_params),
+                                "auth": None,
+                            },
+                            {
+                                "headers": _ch({"Authorization": basic_empty}),
+                                "params": dict(minimal_params),
+                                "auth": None,
+                            },
                         ]
+                        headless = (
+                            str(os.environ.get("API_SERVICE_AUDIT_HEADLESS", ""))
+                            .strip()
+                            .lower()
+                            in {"1", "true", "yes", "on"}
+                        )
+                        if headless:
+                            # Chainabuse Public API: GET ``/v0/reports`` with Basic auth and optional query
+                            # params (``page``, ``perPage`` 1–50). Use the documented key:key scheme first.
+                            # Ref: https://docs.chainabuse.com/reference/reports-1
+                            attempts = [
+                                {
+                                    "headers": _ch({"Authorization": basic_dual}),
+                                    "params": dict(minimal_params),
+                                    "auth": None,
+                                },
+                                {
+                                    "headers": _ch({"Authorization": basic_empty}),
+                                    "params": dict(minimal_params),
+                                    "auth": None,
+                                },
+                            ]
                         response = None
                         best_response = None
-                        for candidate_params in param_candidates:
+                        for attempt in attempts:
                             try:
                                 candidate_response = requests.get(
-                                    url,
-                                    headers=headers,
-                                    params=candidate_params,
-                                    auth=(normalized_key, normalized_key),
-                                    timeout=12
+                                    chainabuse_url,
+                                    headers=attempt["headers"],
+                                    params=attempt["params"],
+                                    auth=attempt["auth"],
+                                    timeout=12,
                                 )
                             except requests.RequestException:
                                 continue
                             if candidate_response.status_code == 200:
                                 response = candidate_response
                                 break
+                            # 429 means credentials were accepted at the edge; stop — later fallbacks
+                            # (Bearer, apiKey, …) often return 401 and would overwrite ``best_response``.
+                            if candidate_response.status_code == 429:
+                                response = candidate_response
+                                break
                             if (
                                 best_response is None
-                                or candidate_response.status_code in [400, 401, 403, 404, 422, 429]
+                                or candidate_response.status_code in [401, 403, 404, 422, 429]
                             ):
-                                best_response = candidate_response
-                            if candidate_response.status_code in [400, 401, 403, 404, 405, 422, 429]:
+                                if best_response is None:
+                                    best_response = candidate_response
+                                else:
+                                    bc = int(best_response.status_code)
+                                    cc = int(candidate_response.status_code)
+                                    # Prefer rate-limit (auth accepted) over spurious 401 from alt schemes.
+                                    if bc == 401 and cc == 429:
+                                        best_response = candidate_response
+                                    elif bc == 429 and cc == 401:
+                                        pass
+                                    else:
+                                        best_response = candidate_response
+                            if candidate_response.status_code in [401, 403, 404, 405, 422, 429]:
                                 continue
                             response = candidate_response
                             break
@@ -1001,148 +2293,78 @@ class APIServiceDashboard:
                             url += f'?apikey={api_key}'
                     
                     # Make GET request for non-RPC services (except those that already made requests)
-                    if service_id not in ['santiment', 'thegraph', 'zapper', 'dune', 'breadcrumbs', 'oklink', 'trmlabs', 'chainabuse']:  # These services handle their own requests
-                        response = requests.get(url, headers=headers, timeout=10)
+                    if service_id not in [
+                        'santiment',
+                        'thegraph',
+                        'zapper',
+                        'dune',
+                        'breadcrumbs',
+                        'oklink',
+                        'defi_api',
+                        'birdeye',
+                        'lifi',
+                        'solanatracker',
+                        'chainabuse',
+                        'debank',
+                        'coinapi',
+                    ]:  # These services handle their own requests
+                        response = requests.get(
+                            url, headers=headers, timeout=_probe_http_timeout_seconds(service_id)
+                        )
                 
                 else:
                     # No API key or service doesn't need one
-                    if service_id not in ['infura', 'alchemy', 'zapper', 'oneinch', 'twitter', 'reddit', 'breadcrumbs', 'thegraph', 'coinapi', 'dune', 'oklink', 'trmlabs', 'chainabuse']:
-                        response = requests.get(url, headers=headers, timeout=10)
+                    if service_id not in [
+                        'infura',
+                        'alchemy',
+                        'zapper',
+                        'oneinch',
+                        'twitter',
+                        'reddit',
+                        'breadcrumbs',
+                        'thegraph',
+                        'coinapi',
+                        'dune',
+                        'oklink',
+                        'defi_api',
+                        'solscan',
+                        'trmlabs',
+                        'coincap',
+                        'birdeye',
+                        'lifi',
+                        'solanatracker',
+                        'chainabuse',
+                    ]:
+                        response = requests.get(
+                            url, headers=headers, timeout=_probe_http_timeout_seconds(service_id)
+                        )
                     else:
                         # These services require API keys, can't test without them
                         if service_id in ['bitcointalk', 'cointelegraph']:
                             # These don't need API keys, just do a simple GET
-                            response = requests.get(url, headers=headers, timeout=10)
+                            response = requests.get(
+                                url,
+                                headers=headers,
+                                timeout=_probe_http_timeout_seconds(service_id),
+                            )
                         else:
                             message = f"⚠️ {service['name']} requires API key for testing"
                             success = False
                             self.root.after(0, self._update_fetch_result, service_id, success, message)
                             return
                 
-                # Check response
-                if response is not None:
-                    if response.status_code in [200, 201]:
-                        if service_id == 'oklink':
-                            try:
-                                payload = response.json()
-                                ok_code = str(payload.get('code', '')).strip()
-                                ok_msg = str(payload.get('msg', '')).strip()
-                            except Exception:
-                                ok_code = ''
-                                ok_msg = ''
-                            if ok_code and ok_code != '0':
-                                success = True
-                                message = f"⚠️ {service['name']}: API reachable but returned code {ok_code} ({ok_msg or 'see OKLink docs'})"
-                            else:
-                                success = True
-                                message = f"✅ Success: {service['name']} responded correctly"
-                        else:
-                            success = True
-                            message = f"✅ Success: {service['name']} responded correctly"
-                    elif (
-                        (
-                            response.status_code in [401, 402, 403, 429]
-                            and service_id in ['moralis', 'twitter', 'zapper', 'breadcrumbs', 'reddit', 'dune', 'coinapi', 'oklink', 'trmlabs', 'chainabuse']
-                        )
-                        or (
-                            response.status_code in [400, 404, 422]
-                            and service_id in ['trmlabs', 'chainabuse']
-                        )
-                    ):
-                        # These are expected for free plans or authentication issues - treat as partial success
-                        success = True
-                        if service_id == 'moralis':
-                            message = f"✅ {service['name']}: Connection successful (free plan limit reached) [[memory:5235766]]"
-                        elif service_id == 'zapper':
-                            message = f"✅ {service['name']}: Connection successful (API responds - check authentication) [[memory:5235766]]"
-                        elif service_id == 'breadcrumbs':
-                            message = f"⚠️ {service['name']}: API endpoint not found (404) - service may be discontinued [[memory:5235766]]"
-                        elif service_id == 'reddit':
-                            message = f"✅ {service['name']}: Connection successful (OAuth2 configured properly) [[memory:5235766]]"
-                        elif service_id == 'dune':
-                            message = f"⚠️ {service['name']}: Invalid API key (401) - check your DUNE_API_KEY [[memory:5235766]]"
-                        elif service_id == 'coinapi':
-                            message = f"⚠️ {service['name']}: API key rejected or rate limited - verify COINAPI_API_KEY [[memory:5235766]]"
-                        elif service_id == 'oklink':
-                            message = f"⚠️ {service['name']}: Authentication/authorization issue (check OKLINK_API_KEY) [[memory:5235766]]"
-                        elif service_id == 'trmlabs':
-                            if response.status_code in [400, 404, 422]:
-                                message = f"⚠️ {service['name']}: Endpoint reachable (request parameters rejected) [[memory:5235766]]"
-                            elif response.status_code == 429:
-                                message = f"⚠️ {service['name']}: Rate limited [[memory:5235766]]"
-                            else:
-                                message = f"⚠️ {service['name']}: Authentication/authorization issue (check TRMLABS_API_KEY) [[memory:5235766]]"
-                        elif service_id == 'chainabuse':
-                            if response.status_code in [400, 404, 422]:
-                                message = f"⚠️ {service['name']}: Endpoint reachable (request parameters rejected) [[memory:5235766]]"
-                            elif response.status_code == 429:
-                                message = f"⚠️ {service['name']}: Rate limited [[memory:5235766]]"
-                            else:
-                                message = f"⚠️ {service['name']}: Authentication/authorization issue (check CHAINABUSE_API_KEY) [[memory:5235766]]"
-                        elif service_id == 'twitter' and response.status_code == 429:
-                            message = f"✅ {service['name']}: Connection successful (rate limited - API working) [[memory:5235766]]"
-                        elif service_id == 'twitter':
-                            message = f"✅ {service['name']}: Connection successful (API working properly) [[memory:5235766]]"
-                    else:
-                        success = False
-                        message = f"❌ Error: {service['name']} returned {response.status_code}"
-                        if hasattr(response, 'text') and response.text:
-                            error_text = response.text[:200]  # First 200 chars of error message
-                            # Special handling for common API issues
-                            if service_id == 'moralis' and 'usage has been consumed' in error_text:
-                                message = f"⚠️ {service['name']}: Free plan daily usage exceeded [[memory:5235766]]"
-                            elif service_id == 'zapper' and ('Missing API key' in error_text or 'Forbidden' in error_text or 'Unauthorized' in error_text):
-                                message = f"✅ {service['name']}: Connection successful (API responds - verify authentication method) [[memory:5235766]]"
-                            elif service_id == 'arkham' and ('Invalid API key' in error_text or 'Unauthorized' in error_text or 'forbidden' in error_text.lower()):
-                                message = f"✅ {service['name']}: Connection successful (API responds - verify API key) [[memory:5235766]]"
-                            elif service_id == 'arkham' and ('not found' in error_text.lower() or '404' in error_text):
-                                message = f"✅ {service['name']}: Connection successful (API responds - endpoint may have changed) [[memory:5235766]]"
-                            elif service_id == 'arkham' and ('rate limit' in error_text.lower() or '429' in error_text):
-                                message = f"✅ {service['name']}: Connection successful (rate limited - API working) [[memory:5235766]]"
-                            elif service_id == 'arkham' and ('not configured' in error_text.lower()):
-                                message = f"⚠️ {service['name']}: API key not configured - add ARKHAM_API_KEY to .env file [[memory:5235766]]"
-                            elif service_id == 'arkham' and ('invalid api key' in error_text.lower()):
-                                message = f"⚠️ {service['name']}: Invalid API key - check your ARKHAM_API_KEY [[memory:5235766]]"
-                            elif service_id == 'breadcrumbs' and ('Unauthorized' in error_text or 'Forbidden' in error_text):
-                                message = f"✅ {service['name']}: Connection successful (API responds - verify API key) [[memory:5235766]]"
-                            elif service_id == 'oklink' and ('50011' in error_text or 'too many requests' in error_text.lower()):
-                                message = f"⚠️ {service['name']}: Rate limit exceeded [[memory:5235766]]"
-                            elif service_id == 'oklink' and ('50014' in error_text or 'invalid authorization' in error_text.lower()):
-                                message = f"⚠️ {service['name']}: Invalid authorization (check OKLINK_API_KEY) [[memory:5235766]]"
-                            elif service_id == 'trmlabs' and ('missing' in error_text.lower() and 'address' in error_text.lower()):
-                                message = f"⚠️ {service['name']}: API reachable (address/query parameter required) [[memory:5235766]]"
-                            elif service_id == 'chainabuse' and ('unauthorized' in error_text.lower() or 'forbidden' in error_text.lower()):
-                                message = f"⚠️ {service['name']}: Invalid authorization (check CHAINABUSE_API_KEY) [[memory:5235766]]"
-                            elif service_id == 'twitter' and ('Unsupported Authentication' in error_text or 'forbidden' in error_text.lower() or 'Too Many Requests' in error_text):
-                                message = f"✅ {service['name']}: Connection successful (API working properly) [[memory:5235766]]"
-                            elif service_id == 'reddit' and ('Unauthorized' in error_text or 'invalid_grant' in error_text):
-                                message = f"✅ {service['name']}: Connection successful (OAuth2 endpoint working) [[memory:5235766]]"
-                            elif 'unauthorized' in error_text.lower() or 'invalid api key' in error_text.lower():
-                                message = f"❌ {service['name']}: Invalid API key"
-                            else:
-                                message += f" - {error_text}"
-                else:
-                    success = False
-                    if service_id == 'trmlabs' and last_request_exception:
-                        last_error = str(last_request_exception).lower()
-                        if (
-                            'failed to resolve' in last_error
-                            or 'name or service not known' in last_error
-                            or 'nodename nor servname provided' in last_error
-                            or 'temporary failure in name resolution' in last_error
-                        ):
-                            message = (
-                                f"⚠️ {service['name']}: Endpoint hostname is not resolvable "
-                                "(provider-side DNS). Set TRMLABS_SANCTIONS_ENDPOINT if TRM gave you a custom host."
-                            )
-                            success = True
-                        else:
-                            message = f"❌ Error: {service['name']} failed to get a response ({last_request_exception})"
-                    else:
-                        message = f"❌ Error: {service['name']} failed to get a response"
-            else:
-                message = f"⚠️ No test endpoint configured for {service['name']}"
-                success = True
+                try:
+                    if response is not None and int(response.status_code) == 429:
+                        _record_probe_cooldown_after_429(service_id, response)
+                except Exception:
+                    pass
+
+                success, message = self._probe_format_response(
+                    service_id,
+                    service,
+                    response,
+                    last_request_exception,
+                )
             
             # Update UI in main thread
             self.root.after(0, self._update_fetch_result, service_id, success, message)
@@ -1402,12 +2624,7 @@ of available API calls as soon as rate limits reset."""
 def main():
     """Main entry point"""
     try:
-        # Load environment variables
-        env_file = '/Users/amlfreak/Desktop/venv/.env'
-        if os.path.exists(env_file):
-            from dotenv import load_dotenv
-            load_dotenv(env_file)
-            print(f"Loaded environment from: {env_file}")
+        _load_env_for_probes()
         
         dashboard = APIServiceDashboard()
         dashboard.run()

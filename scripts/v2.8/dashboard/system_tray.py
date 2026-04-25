@@ -52,8 +52,23 @@ import threading
 import tempfile
 import signal
 import json
+import hashlib
+import hmac
 import fcntl
 from typing import Any, cast
+
+from system_update_manager import (
+    DEFAULT_SYSTEM_UPDATE_SETTINGS,
+    REQUIREMENTS_FILE,
+    check_outdated_packages,
+    install_requirements_upgrade,
+    load_update_state,
+    run_pip_check,
+    run_safety_dry_run,
+    save_update_state,
+    should_run_auto_check,
+    utc_now_iso,
+)
 
 # CRITICAL: Import PIL with fallback handling
 PIL_AVAILABLE = False
@@ -265,6 +280,34 @@ if sys.platform == "darwin":
 # Project paths
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), 'defi_dashboard.py')
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
+except Exception:
+    pass
+
+WEBHOOK_BASE_URL = str(os.getenv('WEBHOOK_BASE_URL', 'http://localhost:5001')).strip().rstrip('/')
+WEBHOOK_SHARED_SECRET = str(os.getenv('WEBHOOK_SHARED_SECRET', '')).strip()
+
+
+def _webhook_headers(payload_bytes: bytes = b'', *, include_signature: bool = False) -> dict[str, str]:
+    headers: dict[str, str] = {'Accept': 'application/json'}
+    if not WEBHOOK_SHARED_SECRET:
+        return headers
+
+    headers['Authorization'] = f'Bearer {WEBHOOK_SHARED_SECRET}'
+    if include_signature:
+        timestamp = str(int(time.time()))
+        signed_payload = f'{timestamp}.'.encode('utf-8') + (payload_bytes or b'')
+        signature = hmac.new(
+            WEBHOOK_SHARED_SECRET.encode('utf-8'),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        headers['X-Webhook-Timestamp'] = timestamp
+        headers['X-Webhook-Signature'] = f'sha256={signature}'
+        headers['Content-Type'] = 'application/json'
+    return headers
 
 class DeFiSystemTray:
     _instance = None
@@ -287,6 +330,13 @@ class DeFiSystemTray:
         os.makedirs(self.lock_dir, exist_ok=True)
         self.unified_dashboard = None
         self.cache_refresh_thread = None
+        self._cache_refresh_state_lock = threading.Lock()
+        self._cache_refresh_inflight = False
+        self._cache_refresh_error_cooldown_s = 120.0
+        self._cache_refresh_last_error_ts = 0.0
+        self.system_update_thread = None
+        self._system_update_lock = threading.Lock()
+        self._system_update_inflight = False
         
         # Set project root path
         self.project_root = PROJECT_ROOT
@@ -331,6 +381,245 @@ class DeFiSystemTray:
         
         # Start webhook server automatically
         self.start_webhook_server()
+        # Start dependency update monitor (low-frequency and safe-check aware)
+        self.start_system_update_monitor()
+
+    @staticmethod
+    def _parse_duration_to_hours(value, default_hours=24.0):
+        """Parse duration strings such as '15 minutes', '2 hours', or '30 days'."""
+        try:
+            if isinstance(value, (int, float)):
+                parsed = float(value)
+                return parsed if parsed > 0 else float(default_hours)
+            text = str(value or '').strip().lower()
+            if not text:
+                return float(default_hours)
+            amount_token = ''.join(ch for ch in text if ch.isdigit() or ch == '.')
+            if not amount_token:
+                return float(default_hours)
+            amount = float(amount_token)
+            if 'minute' in text:
+                return max(1.0 / 60.0, amount / 60.0)
+            if 'day' in text:
+                return amount * 24.0
+            if 'week' in text:
+                return amount * 24.0 * 7.0
+            if 'month' in text:
+                return amount * 24.0 * 30.0
+            if 'year' in text:
+                return amount * 24.0 * 365.0
+            return amount
+        except Exception:
+            return float(default_hours)
+
+    def _load_cache_settings_policy(self):
+        """Load cache interval/retention policy from shared settings.json."""
+        policy = {
+            'interval_hours': 1.0,
+            'retention_hours': 24.0,
+        }
+        try:
+            settings_file = os.path.join(self.project_root, 'data', 'settings.json')
+            if not os.path.exists(settings_file):
+                return policy
+            with open(settings_file, 'r') as f:
+                settings = json.load(f) or {}
+            cache_cfg = settings.get('cache', {}) if isinstance(settings, dict) else {}
+
+            interval_text = cache_cfg.get('auto_refresh_interval', '1 hour')
+            retention_text = cache_cfg.get('cache_retention', '24 hours')
+            interval_h = self._parse_duration_to_hours(interval_text, 1.0)
+            retention_h = self._parse_duration_to_hours(retention_text, 24.0)
+
+            custom_days = cache_cfg.get('cache_retention_custom_days')
+            if custom_days not in (None, ''):
+                try:
+                    retention_h = max(retention_h, float(custom_days) * 24.0)
+                except Exception:
+                    pass
+
+            policy['interval_hours'] = max(1.0 / 60.0, min(interval_h, 24.0 * 365.0))
+            policy['retention_hours'] = max(1.0, min(retention_h, 24.0 * 365.0))
+        except Exception as e:
+            print(f"⚠️ Could not load cache policy settings: {e}")
+        return policy
+
+    def _load_system_update_policy(self):
+        """Load system-update configuration from shared settings.json."""
+        policy = dict(DEFAULT_SYSTEM_UPDATE_SETTINGS)
+        try:
+            settings_file = os.path.join(self.project_root, 'data', 'settings.json')
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    settings = json.load(f) or {}
+                if isinstance(settings, dict):
+                    loaded = settings.get('system_update', {})
+                    if isinstance(loaded, dict):
+                        policy.update(loaded)
+        except Exception as e:
+            print(f"⚠️ Could not load system update policy: {e}")
+        return policy
+
+    def start_system_update_monitor(self):
+        """Run scheduled dependency check/install cycle in background tray process."""
+        if self.system_update_thread and self.system_update_thread.is_alive():
+            return
+
+        def _monitor():
+            print("🧰 System update monitor thread started")
+            while True:
+                try:
+                    self._run_scheduled_system_update_cycle()
+                except Exception as e:
+                    print(f"⚠️ System update monitor error: {e}")
+                time.sleep(300)  # every 5 minutes
+
+        self.system_update_thread = threading.Thread(target=_monitor, daemon=True)
+        self.system_update_thread.start()
+
+    def _run_scheduled_system_update_cycle(self):
+        """Evaluate schedule and run safe dependency update if due."""
+        with self._system_update_lock:
+            if self._system_update_inflight:
+                return
+            self._system_update_inflight = True
+        try:
+            policy = self._load_system_update_policy()
+            state = load_update_state()
+            if not should_run_auto_check(policy, state):
+                return
+
+            print("🧰 Running scheduled dependency check...")
+            check = check_outdated_packages(timeout_seconds=300)
+            state["last_check_at"] = utc_now_iso()
+            state["last_check_duration_seconds"] = float(check.get("duration_seconds", 0.0) or 0.0)
+            state["last_check_output_tail"] = (
+                (check.get("stdout_tail") or "")
+                + ("\n" + check.get("stderr_tail") if check.get("stderr_tail") else "")
+            ).strip()
+
+            if not bool(check.get("ok", False)):
+                state["last_check_status"] = "failed"
+                state["last_error"] = str(check.get("error", "Unknown check error"))
+                save_update_state(state)
+                print(f"⚠️ Dependency check failed: {state['last_error']}")
+                return
+
+            packages = check.get("packages", []) or []
+            state["last_outdated_packages"] = packages
+            state["last_outdated_count"] = len(packages)
+            state["last_error"] = ""
+            if not packages:
+                state["last_check_status"] = "up_to_date"
+                save_update_state(state)
+                print("✅ Dependencies are up to date")
+                return
+
+            state["last_check_status"] = "updates_available"
+            save_update_state(state)
+            if not bool(policy.get("auto_install_safe_updates", False)):
+                print(f"ℹ️ {len(packages)} dependency updates available (auto-install disabled)")
+                return
+
+            timeout_seconds = int(policy.get("max_update_timeout_seconds", 1800) or 1800)
+            if bool(policy.get("safety_check_enabled", True)):
+                safety = run_safety_dry_run(
+                    requirements_path=REQUIREMENTS_FILE,
+                    timeout_seconds=min(timeout_seconds, 900),
+                )
+                if not bool(safety.get("ok", False)):
+                    state["last_update_status"] = "blocked_by_safety_check"
+                    state["last_error"] = str(safety.get("error", "Safety dry-run failed"))
+                    state["last_update_output_tail"] = (
+                        (safety.get("stdout_tail") or "")
+                        + ("\n" + safety.get("stderr_tail") if safety.get("stderr_tail") else "")
+                    ).strip()
+                    save_update_state(state)
+                    print("⚠️ Dependency update blocked by safety check")
+                    return
+
+            install = install_requirements_upgrade(
+                requirements_path=REQUIREMENTS_FILE,
+                timeout_seconds=timeout_seconds,
+            )
+            if not bool(install.get("ok", False)):
+                state["last_update_status"] = "failed"
+                state["last_error"] = str(install.get("error", "Install failed"))
+                state["last_update_duration_seconds"] = float(install.get("duration_seconds", 0.0) or 0.0)
+                state["last_update_output_tail"] = (
+                    (install.get("stdout_tail") or "")
+                    + ("\n" + install.get("stderr_tail") if install.get("stderr_tail") else "")
+                ).strip()
+                save_update_state(state)
+                print("⚠️ Dependency install failed")
+                return
+
+            verify = run_pip_check()
+            state["last_update_at"] = utc_now_iso()
+            state["last_update_duration_seconds"] = float(install.get("duration_seconds", 0.0) or 0.0)
+            state["last_update_output_tail"] = (
+                (install.get("stdout_tail") or "")
+                + ("\n" + install.get("stderr_tail") if install.get("stderr_tail") else "")
+            ).strip()
+
+            # Refresh outdated counts after install so UI/state don't stay stale.
+            post_check = check_outdated_packages(timeout_seconds=300)
+            if bool(post_check.get("ok", False)):
+                remaining = post_check.get("packages", []) or []
+                state["last_check_at"] = utc_now_iso()
+                state["last_check_duration_seconds"] = float(post_check.get("duration_seconds", 0.0) or 0.0)
+                state["last_check_output_tail"] = (
+                    (post_check.get("stdout_tail") or "")
+                    + ("\n" + post_check.get("stderr_tail") if post_check.get("stderr_tail") else "")
+                ).strip()
+                state["last_outdated_packages"] = remaining
+                state["last_outdated_count"] = len(remaining)
+                state["last_check_status"] = "up_to_date" if not remaining else "updates_available"
+            else:
+                remaining = state.get("last_outdated_packages", []) or []
+                state["last_check_status"] = "failed"
+                state["last_error"] = str(post_check.get("error", state.get("last_error", "")))
+            if bool(verify.get("ok", False)):
+                state["last_update_status"] = "success"
+                state["last_error"] = ""
+                if remaining:
+                    print(f"✅ Dependency auto-update applied ({len(packages)} package(s)); {len(remaining)} update(s) still pending")
+                else:
+                    print(f"✅ Dependency auto-update applied ({len(packages)} package(s)); no pending updates remain")
+            else:
+                state["last_update_status"] = "installed_with_warnings"
+                state["last_error"] = str(verify.get("error", "pip check warnings"))
+                state["last_update_output_tail"] = (
+                    state.get("last_update_output_tail", "")
+                    + "\n"
+                    + (verify.get("stdout_tail") or "")
+                    + ("\n" + verify.get("stderr_tail") if verify.get("stderr_tail") else "")
+                ).strip()
+                print("⚠️ Dependency update installed with pip-check warnings")
+            save_update_state(state)
+        finally:
+            with self._system_update_lock:
+                self._system_update_inflight = False
+
+    @staticmethod
+    def _cache_has_missing_metrics(cache_data):
+        """Return True if any token still misses core key metrics."""
+        try:
+            tokens = (cache_data or {}).get('tokens', {})
+            if not isinstance(tokens, dict) or not tokens:
+                return True
+            for token_blob in tokens.values():
+                if not isinstance(token_blob, dict):
+                    return True
+                market_cap = float(token_blob.get('market_cap') or 0)
+                volume_24h = float(token_blob.get('volume_24h') or 0)
+                holders = float(token_blob.get('holders') or 0)
+                liquidity = float(token_blob.get('liquidity') or 0)
+                if market_cap <= 0 or volume_24h <= 0 or holders <= 0 or liquidity <= 0:
+                    return True
+            return False
+        except Exception:
+            return True
     
     def _check_single_instance(self):
         """Ensure only one system tray instance is running"""
@@ -998,6 +1287,11 @@ class DeFiSystemTray:
             
             if result == 0:
                 print("✅ Webhook server already running on port 5001")
+                try:
+                    print("🔄 Triggering background cache enrichment on startup...")
+                    self.trigger_cache_refresh()
+                except Exception as refresh_err:
+                    print(f"⚠️ Startup cache enrichment trigger failed: {refresh_err}")
                 return
             
             # Start webhook server (use v2.0 implementation)
@@ -1025,6 +1319,11 @@ class DeFiSystemTray:
                 
                 if result == 0:
                     print("✅ Webhook server started successfully")
+                    try:
+                        print("🔄 Triggering initial background cache enrichment...")
+                        self.trigger_cache_refresh()
+                    except Exception as refresh_err:
+                        print(f"⚠️ Initial cache enrichment trigger failed: {refresh_err}")
                 else:
                     print("⚠️ Webhook server may not have started properly")
             else:
@@ -1036,22 +1335,43 @@ class DeFiSystemTray:
 
     
     def check_and_refresh_cache(self):
-        """Check cache age and refresh if needed"""
+        """Check cache age and refresh if needed using settings retention policy."""
         try:
             cache_file = os.path.join(PROJECT_ROOT, 'data', 'real_data_cache.json')
+            policy = self._load_cache_settings_policy()
+            interval_hours = float(policy.get('interval_hours', 1.0))
+            retention_hours = float(policy.get('retention_hours', 24.0))
             if os.path.exists(cache_file):
                 with open(cache_file, 'r') as f:
                     cache_data = json.load(f)
                 
                 last_updated = cache_data.get('last_updated', 0)
                 cache_age_hours = (time.time() - last_updated) / 3600
-                
-                # Refresh if cache is older than 2 hours
-                if cache_age_hours > 2:
-                    print(f"Cache is {cache_age_hours:.1f} hours old, triggering refresh...")
+                has_missing_values = self._cache_has_missing_metrics(cache_data)
+
+                should_refresh = False
+                refresh_reason = ""
+                if cache_age_hours >= retention_hours:
+                    should_refresh = True
+                    refresh_reason = (
+                        f"stale by retention ({cache_age_hours:.1f}h >= {retention_hours:.1f}h)"
+                    )
+                elif has_missing_values and cache_age_hours >= interval_hours:
+                    should_refresh = True
+                    refresh_reason = (
+                        f"incremental fill for missing values "
+                        f"({cache_age_hours:.1f}h >= {interval_hours:.2f}h)"
+                    )
+
+                if should_refresh:
+                    print(f"Cache refresh triggered: {refresh_reason}")
                     self.trigger_cache_refresh()
                 else:
-                    print(f"Cache is fresh ({cache_age_hours:.1f} hours old)")
+                    print(
+                        f"Cache is fresh ({cache_age_hours:.1f} hours old) | "
+                        f"retention={retention_hours:.1f}h | "
+                        f"missing_values={'yes' if has_missing_values else 'no'}"
+                    )
             else:
                 print("No cache file found, triggering initial refresh...")
                 self.trigger_cache_refresh()
@@ -1059,48 +1379,98 @@ class DeFiSystemTray:
             print(f"Error checking cache: {e}")
     
     def trigger_cache_refresh(self):
-        """Trigger cache refresh via webhook with improved error handling"""
+        """Trigger cache refresh via webhook (fire-and-forget to avoid UI blocking)"""
         try:
             import requests
             import socket
-            
+            import threading
+            with self._cache_refresh_state_lock:
+                if self._cache_refresh_inflight:
+                    print("⏭️ Cache refresh already in progress; skipping duplicate trigger")
+                    return
+                self._cache_refresh_inflight = True
+
             # First check if webhook server is running
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
             result = sock.connect_ex(('localhost', 5001))
             sock.close()
-            
+
             if result != 0:
                 print("⚠️ Webhook server not running on port 5001, starting it...")
                 self.start_webhook_server()
-                # Wait a moment for server to start
-                import time
-                time.sleep(3)
+                time.sleep(2)
+
+            def _log_refresh_error(message: str):
+                now_ts = time.time()
+                with self._cache_refresh_state_lock:
+                    cooldown = float(self._cache_refresh_error_cooldown_s)
+                    last_ts = float(self._cache_refresh_last_error_ts)
+                    if (now_ts - last_ts) < cooldown:
+                        return
+                    self._cache_refresh_last_error_ts = now_ts
+                print(message)
+
+            def _do_refresh():
+                """Background thread for cache refresh so UI never blocks"""
+                try:
+                    # Avoid piling up requests while a server-side refresh is already running.
+                    try:
+                        status_response = requests.get(
+                            f'{WEBHOOK_BASE_URL}/webhook/update_all_status',
+                            timeout=(1.0, 2.0),
+                            headers=_webhook_headers(),
+                        )
+                        if status_response.status_code == 200:
+                            status_payload = status_response.json() if status_response.content else {}
+                            if bool(status_payload.get('in_progress', False)):
+                                print("⏭️ Cache refresh already running on webhook server; skipping trigger")
+                                return
+                    except Exception:
+                        # Status endpoint failures should not block refresh trigger.
+                        pass
+
+                    # Fail fast on response wait: server keeps working in background after trigger.
+                    payload_bytes = b'{}'
+                    response = requests.post(
+                        f'{WEBHOOK_BASE_URL}/webhook/update_all?async=1',
+                        timeout=(1.5, 2.5),
+                        headers=_webhook_headers(payload_bytes, include_signature=True),
+                        data=payload_bytes,
+                    )
+                    if response.status_code in (200, 202):
+                        if response.status_code == 202:
+                            print("✅ Cache refresh accepted (async job started)")
+                        else:
+                            print("✅ Cache refresh completed successfully")
+                        if self.icon:
+                            self.show_notification("Cache refresh accepted")
+                    else:
+                        print(f"⚠️ Cache refresh returned status {response.status_code} (non-critical)")
+                except requests.exceptions.ConnectionError as e:
+                    _log_refresh_error(f"⚠️ Cache refresh connection error (non-critical): {e}")
+                except requests.exceptions.Timeout:
+                    # Non-blocking trigger may time out under local load; treat as non-fatal noise.
+                    pass
+                except requests.exceptions.RequestException as e:
+                    # urllib3/request adapter edge cases can surface read timeouts as RequestException.
+                    if 'Read timed out' not in str(e):
+                        _log_refresh_error(f"⚠️ Cache refresh request warning (non-critical): {e}")
+                except Exception as e:
+                    _log_refresh_error(f"⚠️ Cache refresh error (non-critical): {e}")
+                finally:
+                    with self._cache_refresh_state_lock:
+                        self._cache_refresh_inflight = False
+
+            # Fire the refresh in a background thread so the UI stays responsive
+            refresh_thread = threading.Thread(target=_do_refresh, daemon=True)
+            self.cache_refresh_thread = refresh_thread
+            refresh_thread.start()
+            print("🔄 Cache refresh started in background...")
             
-            # Try to connect with shorter timeout so UI stays responsive
-            response = requests.post(
-                'http://localhost:5001/webhook/update_all', 
-                timeout=10,  # Non-blocking timeout for optional refresh
-                headers={'Content-Type': 'application/json'},
-                json={}
-            )
-            if response.status_code == 200:
-                print("✅ Cache refresh triggered successfully")
-                if self.icon:
-                    self.show_notification("Cache refreshed successfully")
-            else:
-                print(f"⚠️ Cache refresh returned status {response.status_code} (non-critical)")
-                if response.status_code == 403:
-                    print("   Forbidden - webhook server may be rejecting requests")
-                elif response.status_code == 404:
-                    print("   Endpoint not found - check webhook server is running")
-                print("   Continuing without cache refresh")
-        except requests.exceptions.ConnectionError as e:
-            print(f"⚠️ Cache refresh connection error (non-critical): {e}")
-            print("   Webhook server may not be running - continuing without cache refresh")
-        except requests.exceptions.Timeout as e:
-            print(f"⚠️ Cache refresh timeout (non-critical): {e}")
-            print("   Webhook server is running but not responding - continuing without cache refresh")
         except Exception as e:
+            with self._cache_refresh_state_lock:
+                self._cache_refresh_inflight = False
             print(f"⚠️ Cache refresh error (non-critical): {e}")
             print("   Continuing without cache refresh")
     

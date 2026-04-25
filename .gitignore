@@ -70,3 +70,31 @@ defi_dashboard_locks/
 *.mov
 *.avi
 *.mkv
+
+# ── v2.8-only Git scope (app code only) ───────────────────────────────────────
+# Keep repository push scope constrained to scripts/v2.8, excluding website files.
+# Existing tracked files are not removed by .gitignore; this guards future adds.
+/*
+!/.gitignore
+!/.github/
+!/.github/**
+!/scripts/
+!/scripts/v2.8/
+!/scripts/v2.8/**
+/scripts/v2.8/web_portal/
+/scripts/v2.8/web_portal/**
+
+# Additional hard blocks for secrets/runtime artifacts under v2.8.
+/scripts/v2.8/**/*.env
+/scripts/v2.8/**/*.env.*
+/scripts/v2.8/**/webhook*.env
+/scripts/v2.8/**/secrets*
+/scripts/v2.8/**/*.pem
+/scripts/v2.8/**/*.key
+/scripts/v2.8/**/*.p12
+/scripts/v2.8/**/*.db
+/scripts/v2.8/**/*.db-*
+/scripts/v2.8/**/*.sqlite*
+/scripts/v2.8/**/logs/
+/scripts/v2.8/**/tmp/
+/scripts/v2.8/**/cache/

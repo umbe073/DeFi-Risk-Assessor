@@ -88,10 +88,40 @@ class ChainManager:
                 'description': 'Ethereum mainnet chain ID',
                 'required': True
             },
+            'SOLANA_CHAIN_ID': {
+                'name': 'Solana Mainnet',
+                'default': '101',
+                'description': 'Solana mainnet chain ID',
+                'required': False
+            },
             'ARB_CHAIN_ID': {
                 'name': 'Arbitrum One',
                 'default': '42161',
                 'description': 'Arbitrum L2 chain ID',
+                'required': False
+            },
+            'BASE_CHAIN_ID': {
+                'name': 'Base (L2)',
+                'default': '8453',
+                'description': 'Base L2 chain ID',
+                'required': False
+            },
+            'MANTLE_CHAIN_ID': {
+                'name': 'Mantle (L2)',
+                'default': '5000',
+                'description': 'Mantle network chain ID',
+                'required': False
+            },
+            'LINEA_CHAIN_ID': {
+                'name': 'Linea (L2)',
+                'default': '59144',
+                'description': 'Linea L2 chain ID',
+                'required': False
+            },
+            'SEI_CHAIN_ID': {
+                'name': 'Sei EVM',
+                'default': '1329',
+                'description': 'Sei EVM chain ID',
                 'required': False
             },
             'AVAX_CHAIN_ID': {
@@ -100,10 +130,16 @@ class ChainManager:
                 'description': 'Avalanche blockchain chain ID',
                 'required': False
             },
-            'FTM_CHAIN_ID': {
-                'name': 'Fantom Opera',
-                'default': '250',
-                'description': 'Fantom blockchain chain ID',
+            'ZKSYNC_CHAIN_ID': {
+                'name': 'zkSync Era (L2)',
+                'default': '324',
+                'description': 'zkSync Era chain ID',
+                'required': False
+            },
+            'THORCHAIN_CHAIN_ID': {
+                'name': 'THORChain',
+                'default': '931',
+                'description': 'THORChain network identifier (numeric compatibility mode)',
                 'required': False
             }
         }
@@ -1057,8 +1093,11 @@ This application allows you to configure and manage blockchain chain IDs for dif
 • Polygon (POL)
 • Arbitrum One (ARB)
 • Optimism (OP)
+• Base (BASE)
+• Linea (LINEA)
 • Avalanche C-Chain (AVAX)
-• Fantom Opera (FTM)
+• Solana Mainnet (SOL)
+• Sei EVM (SEI)
 • Sonic Network (SONIC)
 
 Features:

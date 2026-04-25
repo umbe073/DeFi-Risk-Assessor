@@ -8,6 +8,8 @@ import os
 import sys
 import time
 import json
+import hashlib
+import hmac
 import tempfile
 import threading
 import subprocess
@@ -16,17 +18,44 @@ from tkinter import ttk, messagebox
 from PIL import Image, ImageDraw
 import pystray
 from pystray import MenuItem as item
+from typing import Dict
 
 # Project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
 sys.path.append(PROJECT_ROOT)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
+except Exception:
+    pass
+WEBHOOK_BASE_URL = str(os.getenv('WEBHOOK_BASE_URL', 'http://localhost:5001')).strip().rstrip('/')
+WEBHOOK_SHARED_SECRET = str(os.getenv('WEBHOOK_SHARED_SECRET', '')).strip()
+
+
+def _webhook_headers(payload_bytes: bytes = b'', *, include_signature: bool = False) -> dict[str, str]:
+    headers = {'Content-Type': 'application/json'}
+    if not WEBHOOK_SHARED_SECRET:
+        return headers
+
+    headers['Authorization'] = f'Bearer {WEBHOOK_SHARED_SECRET}'
+    if include_signature:
+        timestamp = str(int(time.time()))
+        signed_payload = f'{timestamp}.'.encode('utf-8') + (payload_bytes or b'')
+        signature = hmac.new(
+            WEBHOOK_SHARED_SECRET.encode('utf-8'),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        headers['X-Webhook-Timestamp'] = timestamp
+        headers['X-Webhook-Signature'] = f'sha256={signature}'
+    return headers
 
 class DashboardPanel:
     """Base class for dashboard panels"""
     def __init__(self, parent_frame, title):
         self.parent_frame = parent_frame
         self.title = title
-        self.frame = None
+        self.frame: ttk.Frame | None = None
         self.is_visible = False
         
     def create_panel(self):
@@ -35,8 +64,10 @@ class DashboardPanel:
         
     def show(self):
         """Show the panel"""
-        if not self.frame:
+        if self.frame is None:
             self.create_panel()
+        if self.frame is None:
+            raise RuntimeError(f"Panel '{self.title}' did not initialize a frame")
         self.frame.pack(fill='both', expand=True)
         self.is_visible = True
         
@@ -94,6 +125,8 @@ class APIServicePanel(DashboardPanel):
             ("📊 CoinGecko API", "✅ Active", "8/10 calls"),
             ("🔧 Moralis API", "⚠️ Limited", "99/100 calls"),
             ("💰 CoinMarketCap", "✅ Active", "250/333 calls"),
+            ("📈 CoinCap API", "✅ Active", "1,240/4,000 credits"),
+            ("🔄 LI.FI API", "✅ Active", "18/30 calls"),
         ]
         
         for service_name, status, rate_limit in services:
@@ -174,7 +207,7 @@ class MainDashboardPanel(DashboardPanel):
     def start_assessment(self):
         """Start risk assessment"""
         try:
-            script_path = os.path.join(PROJECT_ROOT, 'scripts', 'v1.5', 'defi_complete_risk_assessment_clean.py')
+            script_path = os.path.join(PROJECT_ROOT, 'scripts', 'v2.0', 'defi_complete_risk_assessment_clean.py')
             subprocess.Popen([sys.executable, script_path], cwd=PROJECT_ROOT)
             messagebox.showinfo("Assessment Started", "Risk assessment process started in background")
         except Exception as e:
@@ -201,11 +234,22 @@ class MainDashboardPanel(DashboardPanel):
         try:
             # Trigger webhook refresh
             import requests
-            response = requests.post('http://localhost:5001/webhook/update_all', timeout=5)
-            if response.status_code == 200:
-                messagebox.showinfo("Cache Refresh", "Cache refresh triggered successfully")
+            payload_bytes = b'{}'
+            response = requests.post(
+                f'{WEBHOOK_BASE_URL}/webhook/update_all?async=1',
+                data=payload_bytes,
+                headers=_webhook_headers(payload_bytes, include_signature=True),
+                timeout=(1.5, 3.0),
+            )
+            if response.status_code in (200, 202):
+                messagebox.showinfo("Cache Refresh", "Cache refresh accepted in background")
                 # Refresh the display after a delay
-                self.frame.after(2000, lambda: self.update_cache_status(self.frame.winfo_children()[1]))
+                frame = self.frame
+                if frame is not None:
+                    children = frame.winfo_children()
+                    if len(children) > 1:
+                        stats_frame = children[1]
+                        frame.after(2000, lambda: self.update_cache_status(stats_frame))
             else:
                 messagebox.showwarning("Cache Refresh", f"Cache refresh failed: {response.status_code}")
         except Exception as e:
@@ -284,9 +328,9 @@ class CredentialsPanel(DashboardPanel):
 class UnifiedDashboard:
     """Main unified dashboard application"""
     def __init__(self):
-        self.root = None
-        self.notebook = None
-        self.panels = {}
+        self.root: tk.Tk | None = None
+        self.notebook: ttk.Notebook | None = None
+        self.panels: Dict[str, DashboardPanel] = {}
         self.system_tray = None
         self.lock_dir = os.path.join(tempfile.gettempdir(), 'defi_dashboard_locks')
         os.makedirs(self.lock_dir, exist_ok=True)
@@ -319,21 +363,25 @@ class UnifiedDashboard:
         
     def create_panels(self):
         """Create all dashboard panels"""
+        if self.notebook is None:
+            raise RuntimeError("Notebook is not initialized")
+        notebook = self.notebook
+
         # Main Dashboard tab
-        main_frame = ttk.Frame(self.notebook)
-        self.notebook.add(main_frame, text="📊 Dashboard")
+        main_frame = ttk.Frame(notebook)
+        notebook.add(main_frame, text="📊 Dashboard")
         self.panels['main'] = MainDashboardPanel(main_frame)
         self.panels['main'].show()
         
         # API Services tab
-        api_frame = ttk.Frame(self.notebook)
-        self.notebook.add(api_frame, text="🔧 API Services")
+        api_frame = ttk.Frame(notebook)
+        notebook.add(api_frame, text="🔧 API Services")
         self.panels['api'] = APIServicePanel(api_frame)
         self.panels['api'].show()
         
         # Credentials tab
-        cred_frame = ttk.Frame(self.notebook)
-        self.notebook.add(cred_frame, text="🔐 Credentials")
+        cred_frame = ttk.Frame(notebook)
+        notebook.add(cred_frame, text="🔐 Credentials")
         self.panels['credentials'] = CredentialsPanel(cred_frame)
         self.panels['credentials'].show()
         
@@ -388,12 +436,15 @@ class UnifiedDashboard:
     
     def show_window(self):
         """Show the main window"""
-        if not self.root:
+        if self.root is None:
             self.create_main_window()
+        if self.root is None:
+            return
+        root = self.root
         
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
+        root.deiconify()
+        root.lift()
+        root.focus_force()
         
     def hide_window(self):
         """Hide the main window"""
@@ -413,6 +464,8 @@ class UnifiedDashboard:
             return False
             
         self.create_main_window()
+        if self.root is None:
+            return False
         self.root.mainloop()
         return True
 

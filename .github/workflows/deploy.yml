@@ -1,75 +1,63 @@
 name: Deploy to Production
 
-# Triggers when a PR is merged into main — or on a manual push to main.
 on:
   push:
     branches:
       - main
-  workflow_dispatch:   # allows manual "re-deploy" trigger from the GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
-    name: SSH deploy to Vultr
+    name: Auto deploy v2.8 with rollback
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Only run if this is not just a docs-only change (optional filter).
-    # Remove the paths-ignore block if you want every merge to trigger a deploy.
-    # paths-ignore:
-    #   - 'docs/**'
-    #   - '**.md'
-
     steps:
-      # ── 1. Checkout (needed to diff / inspect, not strictly for deploy) ──────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Set up SSH ──────────────────────────────────────────────────────────
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # Trust the server's host key (avoids interactive prompt)
           ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT || 22 }} ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
-      # ── 3. Pull latest code on the server & restart services ──────────────────
-      - name: Deploy
+      - name: Deploy script to server
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}        # e.g. /opt/hodler-suite
         run: |
           ssh -i ~/.ssh/deploy_key \
-              -p "${DEPLOY_PORT:-22}" \
-              -o StrictHostKeyChecking=no \
-              "${DEPLOY_USER}@${DEPLOY_HOST}" \
-              bash -s << 'ENDSSH'
-            set -euo pipefail
+            -p "${DEPLOY_PORT:-22}" \
+            -o StrictHostKeyChecking=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "mkdir -p '${{ secrets.DEPLOY_PATH }}/scripts/v2.8/deploy'"
+          scp -i ~/.ssh/deploy_key \
+            -P "${DEPLOY_PORT:-22}" \
+            -o StrictHostKeyChecking=no \
+            scripts/v2.8/deploy/auto_sync_and_deploy.sh \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${{ secrets.DEPLOY_PATH }}/scripts/v2.8/deploy/auto_sync_and_deploy.sh"
 
-            echo "==> Pulling latest code..."
-            cd "$DEPLOY_PATH"
-            git fetch origin main
-            git reset --hard origin/main
+      - name: Run remote deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_WEB_SERVICE: ${{ secrets.DEPLOY_WEB_SERVICE }}
+          DEPLOY_SCRIPT_SERVICE: ${{ secrets.DEPLOY_SCRIPT_SERVICE }}
+          DEPLOY_RUNTIME_TARGET_DIR: ${{ secrets.DEPLOY_RUNTIME_TARGET_DIR }}
+          DEPLOY_HEALTH_URL_APP: ${{ secrets.DEPLOY_HEALTH_URL_APP }}
+          DEPLOY_HEALTH_URL_SCRIPT: ${{ secrets.DEPLOY_HEALTH_URL_SCRIPT }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -p "${DEPLOY_PORT:-22}" \
+            -o StrictHostKeyChecking=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod 700 '${DEPLOY_PATH}/scripts/v2.8/deploy/auto_sync_and_deploy.sh' && APP_ROOT='${DEPLOY_PATH}' RUNTIME_TARGET_DIR='${DEPLOY_RUNTIME_TARGET_DIR:-${DEPLOY_PATH}/scripts/v2.0}' WEB_SERVICE='${DEPLOY_WEB_SERVICE:-hodler-web-portal.service}' SCRIPT_SERVICE='${DEPLOY_SCRIPT_SERVICE:-defirisk-webhook.service}' HEALTH_URL_APP='${DEPLOY_HEALTH_URL_APP:-http://127.0.0.1/healthz}' HEALTH_URL_SCRIPT='${DEPLOY_HEALTH_URL_SCRIPT:-http://127.0.0.1:5001/webhook/health/deep/polygon}' BRANCH='main' bash '${DEPLOY_PATH}/scripts/v2.8/deploy/auto_sync_and_deploy.sh'"
 
-            echo "==> Installing/updating Python dependencies..."
-            pip install -q -r scripts/v2.0/web_portal/requirements.txt 2>/dev/null || true
-            pip install -q -r requirements.txt 2>/dev/null || true
-
-            echo "==> Restarting services..."
-            sudo systemctl restart hodler-webportal.service  || true
-            sudo systemctl restart hodler-script-api.service || true
-
-            echo "==> Verifying services are up..."
-            sleep 3
-            systemctl is-active --quiet hodler-webportal.service  && echo "  webportal  OK" || echo "  webportal  FAILED"
-            systemctl is-active --quiet hodler-script-api.service && echo "  script-api OK" || echo "  script-api FAILED"
-
-            echo "==> Deploy complete."
-          ENDSSH
-
-      # ── 4. Notify Slack on success ─────────────────────────────────────────────
       - name: Notify Slack — success
         if: success()
         uses: slackapi/slack-github-action@v1.27.0
@@ -79,10 +67,10 @@ jobs:
               "text": "✅ *Deploy succeeded* — `${{ github.repository }}` @ `${{ github.sha_short || github.sha }}` merged by *${{ github.actor }}*.\n<${{ github.event.compare }}|View diff>"
             }
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEPLOY_WEBHOOK_URL }}
+          # Reuses the existing SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL secret — no new secret needed.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-      # ── 5. Notify Slack on failure ─────────────────────────────────────────────
       - name: Notify Slack — failure
         if: failure()
         uses: slackapi/slack-github-action@v1.27.0
@@ -92,5 +80,5 @@ jobs:
               "text": "🚨 *Deploy FAILED* — `${{ github.repository }}` @ `${{ github.sha }}` by *${{ github.actor }}*.\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
             }
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEPLOY_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

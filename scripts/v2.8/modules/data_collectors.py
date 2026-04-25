@@ -425,8 +425,9 @@ class LiquidityDataCollector(BaseDataCollector):
             if not api_key:
                 return {'etherscan_summary': 'Etherscan API not configured'}
             
-            url = "https://api.etherscan.io/api"
+            url = "https://api.etherscan.io/v2/api"
             params = {
+                'chainid': 1,
                 'module': 'account',
                 'action': 'txlist',
                 'address': token_address,
