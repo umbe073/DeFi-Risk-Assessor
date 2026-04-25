@@ -3,6 +3,8 @@
 This guide keeps server runtime on `scripts/v2.0`, while local development and GitHub source of truth move to
 `scripts/v2.8`. Deploy sync copies `scripts/v2.8` into server runtime `scripts/v2.0` with backup and rollback.
 
+**Day-to-day workflow (app vs web_portal):** see `OPERATING_MODEL.md` in this folder.
+
 ## 1) Detect canonical server runtime (required first)
 
 ```bash
@@ -43,6 +45,15 @@ bash /opt/hodler-suite/scripts/v2.8/deploy/verify_v2_8_smoke.sh /opt/hodler-suit
 ```
 
 ## 5) GitHub Actions deploy secrets
+
+### `DEPLOY_SSH_PRIVATE_KEY` (if Actions shows `error in libcrypto`)
+
+The workflow writes this secret to a file and runs `ssh`. The key must be a **valid OpenSSH or PEM private key** with **real newline characters** between lines (not the literal text `\n` on one line).
+
+- Paste the full file from `-----BEGIN ... PRIVATE KEY-----` through `-----END ... PRIVATE KEY-----`.
+- Re-save the secret if you copied from Windows Notepad and the key still fails; the workflow strips **CR** (`\r`) but cannot fix a **single-line** or truncated key.
+- **Passphrase-protected** keys do not work with this workflow unless you use a key with an empty passphrase or switch to `ssh-agent` + a different secret strategy.
+- Confirm the matching **public** key is in `authorized_keys` for `DEPLOY_USER` on the server.
 
 Configure:
 

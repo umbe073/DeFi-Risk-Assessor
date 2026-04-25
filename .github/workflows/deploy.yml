@@ -19,8 +19,12 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 700 ~/.ssh
+          # Write PEM/OpenSSH key as-is; strip CR (Windows paste) which breaks libcrypto parsing.
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Fail fast if the secret is not a valid private key (-P '' avoids hang on passphrase keys).
+          ssh-keygen -y -P '' -f ~/.ssh/deploy_key >/dev/null
           ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT || 22 }} ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy script to server
