@@ -76,6 +76,7 @@ defi_dashboard_locks/
 # Existing tracked files are not removed by .gitignore; this guards future adds.
 /*
 !/.gitignore
+!/AGENTS.md
 !/.github/
 !/.github/**
 !/scripts/
