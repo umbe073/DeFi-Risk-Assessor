@@ -2,6 +2,22 @@
 
 This is the **canonical workflow** for Hodler / DeFi Risk work split between **app code on Git** (`scripts/v2.8`) and **website / web_portal** material that may stay out of GitHub scope.
 
+### Pushing changes to GitHub (when the agent or you finish edits)
+
+`git push` only sends **commits**. If you see **Everything up-to-date** but expect new CI/deploy behavior, the edits are still **uncommitted**.
+
+**You (manual):** from repo root, stage only what you intend to ship, then commit and push:
+
+```bash
+cd "/Users/amlfreak/Desktop/venv"
+git status
+git add PATH1 PATH2 …
+git commit -m "fix: short Conventional Commit message"
+git push origin main
+```
+
+**Agents (per `AGENTS.md`):** after changing workflows, `scripts/v2.8/`, or deploy docs, commit scoped paths and `git push origin main` so `main` and Actions stay in sync—do not leave that work only in the working tree.
+
 ## A) App-related material (`scripts/v2.8/` on `main`)
 
 1. **Develop locally** under `scripts/v2.8/` (source of truth for what auto-deploy syncs to server runtime).
