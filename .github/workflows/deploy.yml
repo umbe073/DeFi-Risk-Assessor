@@ -11,10 +11,12 @@ jobs:
     name: Auto deploy v2.8 with rollback
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure SSH
         env:
@@ -74,25 +76,18 @@ jobs:
 
       - name: Notify Slack — success
         if: success()
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: slackapi/slack-github-action@v3.0.2
         with:
+          webhook: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
           payload: |
-            {
-              "text": "✅ *Deploy succeeded* — `${{ github.repository }}` @ `${{ github.sha_short || github.sha }}` merged by *${{ github.actor }}*.\n<${{ github.event.compare }}|View diff>"
-            }
-        env:
-          # Reuses the existing SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL secret — no new secret needed.
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+            text: "✅ *Deploy succeeded* — `${{ github.repository }}` @ `${{ github.sha }}` merged by *${{ github.actor }}*.\n<${{ github.event.compare }}|View diff>"
 
       - name: Notify Slack — failure
         if: failure()
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: slackapi/slack-github-action@v3.0.2
         with:
+          webhook: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
           payload: |
-            {
-              "text": "🚨 *Deploy FAILED* — `${{ github.repository }}` @ `${{ github.sha }}` by *${{ github.actor }}*.\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+            text: "🚨 *Deploy FAILED* — `${{ github.repository }}` @ `${{ github.sha }}` by *${{ github.actor }}*.\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
