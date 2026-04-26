@@ -3,11 +3,12 @@ set -euo pipefail
 
 # GitHub-triggered server deploy for v2.8-only scope.
 # Requires:
-# - git repo already checked out at APP_ROOT
+# - git available on the host; APP_ROOT may be a first-time/non-git directory
 # - service names set correctly for the host
 # - health endpoints reachable locally
 
 APP_ROOT="${APP_ROOT:-/opt/hodler-suite}"
+REPO_URL="${REPO_URL:-https://github.com/ddos-revenge/DeFi-Risk-Assessor.git}"
 BRANCH="${BRANCH:-main}"
 BACKUP_ROOT="${BACKUP_ROOT:-${APP_ROOT}/backups/auto_deploy}"
 RUNTIME_TARGET_DIR="${RUNTIME_TARGET_DIR:-${APP_ROOT}/scripts/v2.0}"
@@ -23,18 +24,38 @@ PREV_COMMIT_FILE="${SNAPSHOT_DIR}/previous_commit.txt"
 
 mkdir -p "${SNAPSHOT_DIR}"
 
+mkdir -p "${APP_ROOT}"
 cd "${APP_ROOT}"
-PREV_COMMIT="$(git rev-parse HEAD)"
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "[deploy] APP_ROOT is not a git checkout; initializing repository at ${APP_ROOT}"
+  git init
+fi
+if git remote get-url origin >/dev/null 2>&1; then
+  git remote set-url origin "${REPO_URL}"
+else
+  git remote add origin "${REPO_URL}"
+fi
+
+PREV_COMMIT=""
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  PREV_COMMIT="$(git rev-parse HEAD)"
+fi
 echo "${PREV_COMMIT}" > "${PREV_COMMIT_FILE}"
-echo "[deploy] previous commit: ${PREV_COMMIT}"
+echo "[deploy] previous commit: ${PREV_COMMIT:-<none>}"
 echo "[deploy] source dir: ${SOURCE_DIR}"
 echo "[deploy] runtime target: ${RUNTIME_TARGET_DIR}"
 
 echo "[deploy] creating scoped backup"
-rsync -a \
-  --exclude ".git/" \
-  --exclude ".venv/" \
-  "${RUNTIME_TARGET_DIR}/" "${SNAPSHOT_DIR}/runtime-target/"
+mkdir -p "${SNAPSHOT_DIR}/runtime-target"
+if [[ -d "${RUNTIME_TARGET_DIR}" ]]; then
+  rsync -a \
+    --exclude ".git/" \
+    --exclude ".venv/" \
+    "${RUNTIME_TARGET_DIR}/" "${SNAPSHOT_DIR}/runtime-target/"
+else
+  echo "[deploy] runtime target does not exist yet; backup is empty"
+fi
 
 if [[ -f "${APP_ROOT}/scripts/v2.8/deploy/runtime_discovery.sh" ]]; then
   bash "${APP_ROOT}/scripts/v2.8/deploy/runtime_discovery.sh" > "${SNAPSHOT_DIR}/runtime_discovery.txt" 2>&1 || true
@@ -73,7 +94,11 @@ set -e
 
 if [[ ${APP_OK} -ne 0 || ${SCRIPT_OK} -ne 0 ]]; then
   echo "[deploy] health check failed, rolling back"
-  git reset --hard "${PREV_COMMIT}"
+  if [[ -n "${PREV_COMMIT}" ]]; then
+    git reset --hard "${PREV_COMMIT}"
+  else
+    echo "[deploy] no previous git commit to restore"
+  fi
   rsync -a --delete "${SNAPSHOT_DIR}/runtime-target/" "${RUNTIME_TARGET_DIR}/"
   sudo systemctl restart "${WEB_SERVICE}" || true
   sudo systemctl restart "${SCRIPT_SERVICE}" || true

@@ -163,6 +163,7 @@ The workflow prefers **`DEPLOY_SSH_PRIVATE_KEY_B64`** and decodes it into `~/.ss
 On merge to `main`, workflow runs `scripts/v2.8/deploy/auto_sync_and_deploy.sh` on server:
 
 - creates pre-deploy backup
+- initializes `DEPLOY_PATH` as a git checkout if it is not one yet
 - fetch/reset to `origin/main`
 - syncs `scripts/v2.8` into runtime target (default server `scripts/v2.0`)
 - restarts services
