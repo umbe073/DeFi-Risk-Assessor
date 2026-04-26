@@ -131,6 +131,9 @@ SSH in the way you already use for admin (your normal user/key), then run **as t
 | `DEPLOY_HEALTH_URL_APP` | URL the runner curls after deploy. Example: `http://127.0.0.1:5050/healthz` |
 | `DEPLOY_HEALTH_URL_SCRIPT` | Second health URL. Example: `http://127.0.0.1:5001/webhook/health/deep/polygon` |
 
+Do **not** set `DEPLOY_RUNTIME_TARGET_DIR` to `DEPLOY_PATH` or any parent of `scripts/v2.8`; `rsync --delete`
+must target the runtime tree (for example `/opt/defi-risk/app/scripts/v2.0`), not the repository root.
+
 4. For **`DEPLOY_SSH_PRIVATE_KEY_B64`** (preferred): on your Mac, run:
 
    ```bash

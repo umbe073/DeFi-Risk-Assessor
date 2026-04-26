@@ -26,6 +26,19 @@ mkdir -p "${SNAPSHOT_DIR}"
 
 mkdir -p "${APP_ROOT}"
 cd "${APP_ROOT}"
+APP_ROOT="$(pwd -P)"
+SOURCE_DIR="${SOURCE_DIR%/}"
+RUNTIME_TARGET_DIR="${RUNTIME_TARGET_DIR%/}"
+if [[ "${RUNTIME_TARGET_DIR}" == "${APP_ROOT}" ]]; then
+  echo "[deploy] WARNING: runtime target was APP_ROOT; using ${APP_ROOT}/scripts/v2.0 instead"
+  RUNTIME_TARGET_DIR="${APP_ROOT}/scripts/v2.0"
+fi
+if [[ "${RUNTIME_TARGET_DIR}" == "${SOURCE_DIR}" ||
+      "${SOURCE_DIR}" == "${RUNTIME_TARGET_DIR}/"* ||
+      "${RUNTIME_TARGET_DIR}" == "${SOURCE_DIR}/"* ]]; then
+  echo "[deploy] unsafe paths: source (${SOURCE_DIR}) and runtime target (${RUNTIME_TARGET_DIR}) overlap" >&2
+  exit 1
+fi
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[deploy] APP_ROOT is not a git checkout; initializing repository at ${APP_ROOT}"
