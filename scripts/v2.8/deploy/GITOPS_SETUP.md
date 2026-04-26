@@ -122,7 +122,8 @@ SSH in the way you already use for admin (your normal user/key), then run **as t
 | `DEPLOY_HOST` | Server hostname or IP only (no `user@`, no `ssh://`). Example: `80.240.31.172` |
 | `DEPLOY_USER` | SSH login name GitHub uses. Example: `linuxuser` |
 | `DEPLOY_SSH_PORT` | Port number as string if not 22. Example: `22` |
-| `DEPLOY_SSH_PRIVATE_KEY` | **Entire** contents of **`gha-deploy-ed25519`** (private file), from first `-----BEGIN …-----` line through last `-----END …-----` line, including line breaks. Do not wrap in quotes. |
+| `DEPLOY_SSH_PRIVATE_KEY_B64` | **Preferred.** Base64 of the private key file (one line, no wrapping). Generate with the command below. |
+| `DEPLOY_SSH_PRIVATE_KEY` | Fallback only. Entire contents of **`gha-deploy-ed25519`** (private file), from first `-----BEGIN …-----` line through last `-----END …-----` line, including line breaks. Do not wrap in quotes. |
 | `DEPLOY_PATH` | Git repo root on server (where `scripts/v2.8` lives after clone). Example: `/opt/hodler-suite` or `/opt/defi-risk/app` |
 | `DEPLOY_RUNTIME_TARGET_DIR` | Directory rsync targets (often `…/scripts/v2.0`). Example: `/opt/defi-risk/app/scripts/v2.0` |
 | `DEPLOY_WEB_SERVICE` | systemd unit for portal. Example: `hodler-web-portal.service` |
@@ -130,24 +131,32 @@ SSH in the way you already use for admin (your normal user/key), then run **as t
 | `DEPLOY_HEALTH_URL_APP` | URL the runner curls after deploy. Example: `http://127.0.0.1:5050/healthz` |
 | `DEPLOY_HEALTH_URL_SCRIPT` | Second health URL. Example: `http://127.0.0.1:5001/webhook/health/deep/polygon` |
 
-4. For **`DEPLOY_SSH_PRIVATE_KEY`**: open the private key in a **plain-text** editor (VS Code / `nano` on Mac). Copy **all** lines. In GitHub’s secret value box, paste once. Save. If GitHub ever shows the value as one line in the UI, that is normal for display — the important part is that the stored secret preserves newlines (GitHub Actions does preserve them in `${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}`).
+4. For **`DEPLOY_SSH_PRIVATE_KEY_B64`** (preferred): on your Mac, run:
 
-5. **Passphrase**: if you generated the key with `-N ""` as above, there is no passphrase. Passphrase-protected keys will **not** work with the current workflow.
+   ```bash
+   base64 -i ~/.ssh/hodler-gha/gha-deploy-ed25519 | tr -d '\n'
+   ```
+
+   Copy the **entire one-line output** into the GitHub secret value and save. This avoids multiline copy/paste corruption and is the recommended fix for `error in libcrypto`.
+
+5. If you cannot use base64, fallback to **`DEPLOY_SSH_PRIVATE_KEY`**: open the private key in a **plain-text** editor (VS Code / `nano` on Mac). Copy **all** lines. In GitHub’s secret value box, paste once. Save. If GitHub ever shows the value as one line in the UI, that is normal for display — the important part is that the stored secret preserves newlines (GitHub Actions does preserve them in `${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}`).
+
+6. **Passphrase**: if you generated the key with `-N ""` as above, there is no passphrase. Passphrase-protected keys will **not** work with the current workflow.
 
 ### D) Confirm workflow and re-run
 
-1. Ensure `main` contains `.github/workflows/deploy.yml` (the version that writes the key with `printf` + `tr -d '\r'` + `ssh-keygen` check).
+1. Ensure `main` contains `.github/workflows/deploy.yml` (the version that prefers `DEPLOY_SSH_PRIVATE_KEY_B64`, falls back to `DEPLOY_SSH_PRIVATE_KEY`, and runs an `ssh-keygen` check).
 2. **Actions** → **Deploy to Production** → open the latest run → **Re-run all jobs** (or push a small commit to `main`).
 
 ### E) If it still fails
 
-- **`error in libcrypto` / `ssh-keygen` fails in “Configure SSH”**: the private key secret is malformed (wrong file, truncated, literal `\n` instead of newlines). Re-paste from the private key file or regenerate.
+- **`error in libcrypto` / `ssh-keygen` fails in “Configure SSH”**: the private key secret is malformed (wrong file, truncated, literal `\n` instead of newlines). Use `DEPLOY_SSH_PRIVATE_KEY_B64` generated directly from the private key file.
 - **`Permission denied (publickey)`** after libcrypto is gone: wrong `DEPLOY_USER` / `DEPLOY_HOST` / port, or public key not in that user’s `authorized_keys`, or wrong key in secret (e.g. pasted `.pub` into private secret by mistake).
 - **Never** paste the private key into issues, chat logs, or commits.
 
-### `DEPLOY_SSH_PRIVATE_KEY` (quick reference)
+### `DEPLOY_SSH_PRIVATE_KEY_B64` / `DEPLOY_SSH_PRIVATE_KEY` (quick reference)
 
-The workflow writes this secret to a file and runs `ssh`. The key must be a **valid OpenSSH or PEM private key** with **real newline characters** between lines (not the literal text `\n` on one line). The workflow strips **CR** (`\r`) but cannot fix a **single-line** or truncated key.
+The workflow prefers **`DEPLOY_SSH_PRIVATE_KEY_B64`** and decodes it into `~/.ssh/deploy_key`. If that secret is empty, it falls back to raw **`DEPLOY_SSH_PRIVATE_KEY`**. The decoded/written key must be a **valid OpenSSH or PEM private key**. The matching public key must be in `authorized_keys` for `DEPLOY_USER`.
 
 ## 6) Auto-deploy operation
 

@@ -17,15 +17,25 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure SSH
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_PRIVATE_KEY_B64: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY_B64 }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          # Write PEM/OpenSSH key as-is; strip CR (Windows paste) which breaks libcrypto parsing.
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          if [[ -n "${DEPLOY_SSH_PRIVATE_KEY_B64:-}" ]]; then
+            # Preferred: base64 avoids browser/GitHub newline corruption in multiline secrets.
+            printf '%s' "${DEPLOY_SSH_PRIVATE_KEY_B64}" | tr -d '\r\n ' | base64 -d > ~/.ssh/deploy_key
+          else
+            # Fallback: raw PEM/OpenSSH key; strip CR (Windows paste) which breaks libcrypto parsing.
+            printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/deploy_key
+          fi
           chmod 600 ~/.ssh/deploy_key
           # Fail fast if the secret is not a valid private key (-P '' avoids hang on passphrase keys).
           ssh-keygen -y -P '' -f ~/.ssh/deploy_key >/dev/null
-          ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT || 22 }} ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -p "${DEPLOY_SSH_PORT:-22}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy script to server
         env:
