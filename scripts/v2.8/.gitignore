@@ -3,9 +3,25 @@ __pycache__/
 *.py[cod]
 *.pyo
 
-# ── Runtime / generated data ─────────────────────────────────────────────────
-# SQLite databases (contain live user/billing/support data — NEVER commit)
-data/
+# ── v2.8 data publication ────────────────────────────────────────────────────
+# Keep scripts/v2.8/data publishable, but block live/runtime artifacts.
+data/**/*.db
+data/**/*.db-shm
+data/**/*.db-wal
+data/**/*.sqlite
+data/**/*.sqlite3
+data/**/__pycache__/
+data/**/*.py[cod]
+data/**/*.log
+data/**/*.pid
+data/**/*.tmp*
+data/**/*.corrupt*
+data/**/*.oversize*
+data/**/*.backup
+data/**/*.pkl
+data/**/cache/
+data/**/tmp/
+data/**/logs/
 *.db
 *.db-shm
 *.db-wal

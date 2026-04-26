@@ -47,7 +47,7 @@ The same rules are available in `.cursor/rules/` for the Cursor IDE.
 
 1. **Plan first** for any task touching >3 files or involving architectural changes
 2. **Run `pytest` and `flake8`** before marking any task done
-3. **Never commit** `.env`, `*.db`, `*.key`, `*.pem`, or any file under `data/` or `logs/`
+3. **Never commit** `.env`, `*.db`, `*.key`, `*.pem`, or `logs/`. `scripts/v2.8/data/` may be committed when the user explicitly asks for v2.8 data publication and after `.gitignore` filters keep DBs, pyc, logs, temp/corrupt cache files, key material, env files, and runtime caches out of Git. Root `/data/` remains ignored unless explicitly requested separately.
 4. **Never suggest** React, Tailwind, ORMs, or Node.js unless explicitly asked
 5. **Fix CI failures** without being asked when you see them in the PR
 6. **Commit and push repo-facing changes** when the task is done: stage **only** paths this task touched (e.g. `.github/workflows/`, `scripts/v2.8/**`, deploy docs), commit with Conventional Commits, run `git push origin main`. Do **not** leave workflow or `v2.8` fixes uncommitted (that produces “Everything up-to-date” with no deploy). Never `git add -A` unrelated WIP (bulk `scripts/v2.0/`, ignored portal trees). If push cannot be run here, tell the user explicitly and paste the exact `git add` / `git commit` / `git push` block.

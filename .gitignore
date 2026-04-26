@@ -18,7 +18,7 @@ build/
 *.egg
 .eggs/
 
-# ── Runtime / generated data ─────────────────────────────────────────────────
+# ── Runtime / generated artifacts ─────────────────────────────────────────────
 *.db
 *.db-shm
 *.db-wal
