@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Notify Slack when Hodler Suite Administrator is tagged
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
           TARGET_REVIEWER: degen-hodler

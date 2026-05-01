@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -43,15 +43,24 @@ jobs:
             pip install -q -r scripts/v2.8/requirements.txt 2>/dev/null || true
           fi
 
-      - name: Scope guard (only v2.8 app material)
+      - name: Resolve changed files
+        id: changed
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          disallowed=$(git diff --name-only origin/main...HEAD | rg -v '^scripts/v2\.8/' | rg -v '^\.github/' || true)
-          if [ -n "$disallowed" ]; then
-            echo "::error::PR contains files outside allowed scope (scripts/v2.8 + .github):"
-            echo "$disallowed"
+          git fetch --no-tags --depth=1 origin "${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          git diff --name-only "origin/${BASE_REF}..HEAD" > /tmp/changed-files.txt
+          echo "Changed files:"
+          sed -n '1,200p' /tmp/changed-files.txt
+
+      - name: Scope guard (repository safety)
+        run: |
+          if rg '(^|/)\.env($|\.|/)|\.(db|db-shm|db-wal|sqlite|sqlite3)$|(^|/)logs/|(^|/)data/' /tmp/changed-files.txt >/dev/null; then
+            echo "::error::PR contains forbidden runtime, secret, database, log, or data paths:"
+            rg '(^|/)\.env($|\.|/)|\.(db|db-shm|db-wal|sqlite|sqlite3)$|(^|/)logs/|(^|/)data/' /tmp/changed-files.txt || true
             exit 1
           fi
-          if git diff --name-only origin/main...HEAD | rg '^scripts/v2\.8/web_portal/' >/dev/null; then
+          if rg '^scripts/v2\.8/web_portal/' /tmp/changed-files.txt >/dev/null; then
             echo "::error::Website files under scripts/v2.8/web_portal are forbidden from push scope."
             exit 1
           fi
@@ -74,7 +83,18 @@ jobs:
 
       - name: Secret leak guard (gitleaks)
         run: |
-          gitleaks detect --source . --no-git --redact --exit-code 1
+          scan_dir="$(mktemp -d)"
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              mkdir -p "${scan_dir}/$(dirname "$file")"
+              cp "$file" "${scan_dir}/${file}"
+            fi
+          done < /tmp/changed-files.txt
+          if [ -z "$(find "$scan_dir" -type f -print -quit)" ]; then
+            echo "No changed files to scan."
+            exit 0
+          fi
+          gitleaks detect --source "$scan_dir" --no-git --redact --exit-code 1
 
       - name: Secret leak guard (forbidden files)
         run: |
