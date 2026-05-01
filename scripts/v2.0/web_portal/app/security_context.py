@@ -167,6 +167,36 @@ def _normalize_ip(value: str) -> str:
         return text[:64]
 
 
+def _is_safe_lookup_url_target(lookup_url: str) -> bool:
+    try:
+        parsed = urlparse.urlsplit(str(lookup_url or "").strip())
+    except Exception:
+        return False
+
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if not parsed.hostname:
+        return False
+    if parsed.username or parsed.password:
+        return False
+
+    host = str(parsed.hostname).strip()
+    try:
+        host_ip = ipaddress.ip_address(host)
+        if (
+            host_ip.is_private
+            or host_ip.is_loopback
+            or host_ip.is_link_local
+            or host_ip.is_multicast
+            or host_ip.is_reserved
+        ):
+            return False
+    except ValueError:
+        pass
+
+    return True
+
+
 def _ip_intel_cache_key(*, ip_address: str, lookup_url: str, api_key: str) -> str:
     token = f"{ip_address}|{lookup_url}|{api_key}"
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -249,6 +279,9 @@ def lookup_ip_intel(
     base = default_ip_intel(ip_address)
     lookup_url = str(lookup_url or "").strip()
     if not lookup_url:
+        return base
+    if not _is_safe_lookup_url_target(lookup_url):
+        base["intel_source"] = "lookup_failed"
         return base
 
     ip = str(base.get("ip_address", "")).strip()
