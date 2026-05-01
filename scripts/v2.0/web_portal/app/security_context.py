@@ -6,6 +6,7 @@ import hashlib
 import ipaddress
 import json
 import re
+import socket
 import time
 from threading import Lock
 from typing import Any, Dict, Optional
@@ -47,6 +48,16 @@ EU_COUNTRY_CODES = {
 IP_INTEL_CACHE_MAX_ENTRIES = 4096
 _IP_INTEL_CACHE: Dict[str, Dict[str, Any]] = {}
 _IP_INTEL_CACHE_LOCK = Lock()
+_BLOCKED_LOOKUP_HOSTNAMES = {"localhost", "metadata", "metadata.google.internal"}
+_BLOCKED_LOOKUP_HOST_SUFFIXES = (".localhost", ".local", ".localdomain", ".internal")
+
+
+class _NoLookupRedirectHandler(urlrequest.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+        return None
+
+
+_LOOKUP_OPENER = urlrequest.build_opener(_NoLookupRedirectHandler)
 
 
 def country_flag(country_code: str) -> str:
@@ -167,6 +178,82 @@ def _normalize_ip(value: str) -> str:
         return text[:64]
 
 
+def _is_safe_lookup_ip_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return bool(
+        address.is_global
+        and not address.is_loopback
+        and not address.is_link_local
+        and not address.is_private
+        and not address.is_multicast
+        and not address.is_reserved
+        and not address.is_unspecified
+    )
+
+
+def _is_blocked_lookup_hostname(hostname: str) -> bool:
+    normalized = str(hostname or "").strip().strip(".").lower()
+    if not normalized:
+        return True
+    if normalized in _BLOCKED_LOOKUP_HOSTNAMES:
+        return True
+    return any(normalized.endswith(suffix) for suffix in _BLOCKED_LOOKUP_HOST_SUFFIXES)
+
+
+def _is_safe_lookup_url_target(lookup_url: str) -> bool:
+    try:
+        parsed = urlparse.urlsplit(str(lookup_url or "").strip())
+        port = parsed.port
+    except ValueError:
+        return False
+
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        return False
+    if not parsed.hostname:
+        return False
+    if parsed.username or parsed.password:
+        return False
+
+    host = str(parsed.hostname).strip()
+    if _is_blocked_lookup_hostname(host):
+        return False
+
+    port = port or (443 if scheme == "https" else 80)
+    try:
+        host_ip = ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            ascii_host = host.encode("idna").decode("ascii")
+        except UnicodeError:
+            return False
+        if _is_blocked_lookup_hostname(ascii_host):
+            return False
+        try:
+            resolved_rows = socket.getaddrinfo(ascii_host, port, type=socket.SOCK_STREAM)
+        except OSError:
+            return False
+
+        resolved_addresses = []
+        for row in resolved_rows:
+            socket_address = row[4] if len(row) > 4 else None
+            if not socket_address:
+                return False
+            try:
+                resolved = ipaddress.ip_address(str(socket_address[0]).split("%", 1)[0])
+            except (IndexError, ValueError):
+                return False
+            if not _is_safe_lookup_ip_address(resolved):
+                return False
+            resolved_addresses.append(resolved)
+        return bool(resolved_addresses)
+
+    return _is_safe_lookup_ip_address(host_ip)
+
+
+def _open_lookup_request(req: urlrequest.Request, *, timeout_seconds: int) -> Any:
+    return _LOOKUP_OPENER.open(req, timeout=timeout_seconds)
+
+
 def _ip_intel_cache_key(*, ip_address: str, lookup_url: str, api_key: str) -> str:
     token = f"{ip_address}|{lookup_url}|{api_key}"
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -270,13 +357,18 @@ def lookup_ip_intel(
     if isinstance(cached, dict):
         return cached
 
+    if not _is_safe_lookup_url_target(url):
+        base["intel_source"] = "lookup_failed"
+        _ip_intel_cache_put(cache_key=cache_key, payload=base, ttl_seconds=cache_ttl_seconds)
+        return base
+
     req = urlrequest.Request(url, method="GET")
     req.add_header("Accept", "application/json")
     if api_key and "{api_key}" not in lookup_url:
         req.add_header("Authorization", f"Bearer {api_key}")
 
     try:
-        with urlrequest.urlopen(req, timeout=max(2, int(timeout_seconds))) as response:
+        with _open_lookup_request(req, timeout_seconds=max(2, int(timeout_seconds))) as response:
             payload = json.loads(response.read().decode("utf-8", errors="replace"))
     except (urlerror.URLError, TimeoutError, ValueError, OSError):
         base["intel_source"] = "lookup_failed"
@@ -334,7 +426,10 @@ def lookup_ip_intel(
                     "isVPN",
                     payload.get(
                         "is_anonymous_vpn",
-                        security_payload.get("is_vpn", security_payload.get("is_anonymous_vpn", proxy_payload.get("is_vpn"))),
+                        security_payload.get(
+                            "is_vpn",
+                            security_payload.get("is_anonymous_vpn", proxy_payload.get("is_vpn")),
+                        ),
                     ),
                 ),
             ),
@@ -389,7 +484,10 @@ def lookup_ip_intel(
                     "isHosting",
                     payload.get(
                         "is_server",
-                        security_payload.get("is_hosting", security_payload.get("is_server", proxy_payload.get("is_data_center"))),
+                        security_payload.get(
+                            "is_hosting",
+                            security_payload.get("is_server", proxy_payload.get("is_data_center")),
+                        ),
                     ),
                 ),
             ),
