@@ -9,6 +9,8 @@ on:
       - main
   schedule:
     - cron: "26 21 * * 2"
+  # Manual re-run after toggling Code scanning / Copilot Autofix, or to refresh alert state.
+  workflow_dispatch:
 
 permissions:
   actions: read
