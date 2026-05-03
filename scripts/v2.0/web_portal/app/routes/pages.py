@@ -863,6 +863,10 @@ def _tls_days_remaining(hostname: str, *, timeout_seconds: int = 4) -> tuple[str
     started = time.perf_counter()
     try:
         context = ssl.create_default_context()
+        if hasattr(ssl, "TLSVersion"):
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+        else:  # pragma: no cover - compatibility fallback
+            context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
         with socket.create_connection((host, 443), timeout=timeout_seconds) as sock:
             with context.wrap_socket(sock, server_hostname=host) as tls_sock:
                 cert = tls_sock.getpeercert()
