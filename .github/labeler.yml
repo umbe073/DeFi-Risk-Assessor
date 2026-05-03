@@ -1,0 +1,23 @@
+# Config for actions/labeler@v4 (minimatch globs).
+# Repo: https://github.com/actions/labeler — filename must be exactly `.github/labeler.yml`
+#
+# Create matching labels in GitHub (Settings → Labels), or grant `issues: write` on the
+# labeler job so new labels can be auto-created.
+
+documentation:
+  - docs/**
+
+ci:
+  # v4 defaults `dot: false`; this form still matches `.github/...` paths.
+  - "**/.github/**"
+
+dependencies:
+  - requirements.txt
+
+"web portal":
+  - scripts/v2.0/web_portal/**
+
+"risk engine":
+  - scripts/v2.0/defi_complete_risk_assessment_clean.py
+  - scripts/v2.0/api_error_handler.py
+  - scripts/v2.0/dashboard/**
