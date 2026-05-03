@@ -175,7 +175,7 @@ def _normalize_ip(value: str) -> str:
     try:
         return str(ipaddress.ip_address(text))
     except ValueError:
-        return text[:64]
+        return ""
 
 
 def _is_safe_lookup_ip_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
