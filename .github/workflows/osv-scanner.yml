@@ -22,9 +22,10 @@ on:
     branches: [ "main" ]
 
 permissions:
-  # Require writing security events to upload the SARIF file to the security tab
+  # Required by google/osv-scanner-action reusable workflow (upload-sarif / CodeQL integration).
+  actions: read
+  # Upload SARIF to Security → Code scanning
   security-events: write
-  # Read commit contents
   contents: read
 
 jobs:
