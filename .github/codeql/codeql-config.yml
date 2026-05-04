@@ -44,5 +44,9 @@ paths-ignore:
   - "**/backup_*/**"
   - "**/obsolete_scripts/**"
 
+# Use the security-extended suite only. `security-and-quality` adds dozens of
+# code-quality / maintainability rules (e.g. "Unused global variable", note
+# severity) which produced ~1.1k informational alerts on the in-scope tree.
+# Quality is already enforced via flake8 / pyflakes in the PR Checks workflow.
 queries:
-  - uses: security-and-quality
+  - uses: security-extended
