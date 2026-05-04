@@ -79,6 +79,8 @@ defi_dashboard_locks/
 !/AGENTS.md
 !/CONTRIBUTING.md
 !/LICENSE
+!/.gitleaks.toml
+!/README.md
 !/SECURITY.md
 !/.github/
 !/.github/**

@@ -1,0 +1,22 @@
+# Repository gitleaks overrides (extends built-in rules from the gitleaks binary).
+# CI copies only changed files into a temp dir; `.github/workflows/pr-check.yml` passes
+# `--config "$GITHUB_WORKSPACE/.gitleaks.toml"` so this file is always applied.
+
+title = "Hodler Suite – gitleaks"
+
+[extend]
+useDefault = true
+
+# False positives: policy docs use words like "secret(s)" / "private key(s)" in prose, and
+# LICENSE lists a public licensing contact address (not a repository credential).
+[allowlist]
+regexes = [
+  '''(?i)never commit secrets''',
+  '''(?i)do not paste.*\bsecrets\b''',
+  '''(?i)treat support attachments''',
+  '''(?i)private keys''',
+  '''(?i)prefer HMAC/signature verification''',
+  '''(?i)confidential trade secrets''',
+  '''(?i)proprietary and confidential''',
+  '''(?i)legal@hodler-suite\.com''',
+]
