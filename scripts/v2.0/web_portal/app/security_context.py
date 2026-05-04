@@ -256,15 +256,10 @@ def _open_lookup_request(req: urlrequest.Request, *, timeout_seconds: int) -> An
     return _LOOKUP_OPENER.open(req, timeout=timeout_seconds)
 
 
-def _ip_intel_cache_key(*, ip_address: str, lookup_url: str, api_key: str) -> str:
-    """Keyed Blake2b over (ip, URL): API key is MAC key material only, not digested as password input."""
-    message = f"{ip_address}|{lookup_url}".encode("utf-8")
-    raw_key = (api_key or "").encode("utf-8")
-    if len(raw_key) > 64:
-        raw_key = raw_key[:64]
-    if not raw_key:
-        raw_key = b"\x00"
-    return hashlib.blake2b(message, key=raw_key, digest_size=32).hexdigest()
+def _ip_intel_cache_key(*, ip_address: str, lookup_url: str, has_api_key: bool) -> str:
+    """Deterministic cache key over non-sensitive dimensions only."""
+    message = f"{ip_address}|{lookup_url}|auth={int(bool(has_api_key))}".encode("utf-8")
+    return hashlib.blake2b(message, digest_size=32).hexdigest()
 
 
 def _ip_intel_cache_get(cache_key: str) -> Optional[Dict[str, Any]]:
@@ -360,7 +355,7 @@ def lookup_ip_intel(
         sep = "&" if "?" in url_template else "?"
         url = f"{url_template}{sep}ip={urlparse.quote(ip, safe='')}"
 
-    cache_key = _ip_intel_cache_key(ip_address=ip, lookup_url=url_template, api_key=api_key)
+    cache_key = _ip_intel_cache_key(ip_address=ip, lookup_url=url_template, has_api_key=bool(api_key))
     cached = _ip_intel_cache_get(cache_key)
     if isinstance(cached, dict):
         return cached

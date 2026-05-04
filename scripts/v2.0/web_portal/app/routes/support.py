@@ -1975,16 +1975,9 @@ def create_ticket():
         attachments=files,
     )
     response = jsonify(result_payload)
-    allowed_response_headers = {"Retry-After"}
-    for header, value in extra_headers.items():
-        header_name = str(header or "").strip()
-        if (
-            not header_name
-            or header_name not in allowed_response_headers
-            or not _HEADER_NAME_TOKEN_PATTERN.fullmatch(header_name)
-        ):
-            continue
-        response.headers[header_name] = sanitize_header_value(str(value))
+    retry_after_value = extra_headers.get("Retry-After")
+    if retry_after_value is not None:
+        response.headers["Retry-After"] = sanitize_header_value(str(retry_after_value))
     return response, status_code
 
 
