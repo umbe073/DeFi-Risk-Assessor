@@ -15,13 +15,11 @@ This module implements the exact workflow logic for loading token data:
 4. Ignore 0 or N/A values when calculating averages
 """
 
-import os
 import sys
 import json
 import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Optional
-import requests
 from datetime import datetime
 
 # Add project root to path
@@ -119,28 +117,28 @@ class TokenDataLoader:
         webhook_data = self._fetch_webhook_cache(address)
         if webhook_data:
             self._collect_values(values_collected, webhook_data, 'webhook_cache')
-            print(f"  ✅ Webhook cache data found")
+            print("  ✅ Webhook cache data found")
         
         # Step 2.2: Fallback File (if values missing)
         if self._has_missing_values(values_collected):
             fallback_data = self._fetch_fallback_file(address)
             if fallback_data:
                 self._collect_values(values_collected, fallback_data, 'fallback_file')
-                print(f"  ✅ Fallback file data found")
+                print("  ✅ Fallback file data found")
         
         # Step 2.3: API Endpoints (if values still missing)
         if self._has_missing_values(values_collected):
             api_data = self._fetch_api_data(address, symbol)
             if api_data:
                 self._collect_values(values_collected, api_data, 'api_endpoints')
-                print(f"  ✅ API endpoints data found (multiple APIs)")
+                print("  ✅ API endpoints data found (multiple APIs)")
         
         # Step 2.4: Latest Risk Report (final fallback)
         if self._has_missing_values(values_collected):
             risk_report_data = self._fetch_risk_report(address, symbol)
             if risk_report_data:
                 self._collect_values(values_collected, risk_report_data, 'risk_report')
-                print(f"  ✅ Risk report data found")
+                print("  ✅ Risk report data found")
         
         # Calculate averages (ignoring 0 and None values)
         result['market_cap'] = self._calculate_average(values_collected['market_cap'])
@@ -150,7 +148,7 @@ class TokenDataLoader:
         result['liquidity'] = self._calculate_average(values_collected['liquidity'])
         
         # Report final values
-        print(f"  📊 Final values:")
+        print("  📊 Final values:")
         print(f"     Market Cap: {self._format_value(result['market_cap'], is_currency=True)}")
         print(f"     Volume 24h: {self._format_value(result['volume_24h'], is_currency=True)}")
         print(f"     Price: {self._format_value(result['price'], is_currency=True, is_price=True)}")

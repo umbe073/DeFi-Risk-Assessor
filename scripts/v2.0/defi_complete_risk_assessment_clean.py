@@ -3630,7 +3630,8 @@ def _http_state_request_key(url, params=None):
         return ''
     keys = _mapping_key_names_fingerprint(params) if params else ''
     payload = f'{red}|{keys}'
-    return hashlib.sha3_256(payload.encode('utf-8')).hexdigest()
+    # Non-credential cache coordination only (not password storage).
+    return hashlib.sha3_256(payload.encode('utf-8'), usedforsecurity=False).hexdigest()
 
 
 def _load_http_request_state():
@@ -20550,7 +20551,8 @@ def get_cache_key(url, params=None, headers=None, data=None):
         parts.append(_mapping_key_names_fingerprint(filtered_headers))
     if data:
         parts.append(_mapping_key_names_fingerprint(data))
-    return hashlib.sha3_256('|'.join(parts).encode('utf-8')).hexdigest()
+    # Non-credential HTTP cache key (not password storage).
+    return hashlib.sha3_256('|'.join(parts).encode('utf-8'), usedforsecurity=False).hexdigest()
 
 def fetch_vespia_authentication():
     """Authenticate with Vespia API and get access token"""
