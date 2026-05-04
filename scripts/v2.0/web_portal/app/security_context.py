@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import ipaddress
 import json
 import os
@@ -258,8 +257,7 @@ def _open_lookup_request(req: urlrequest.Request, *, timeout_seconds: int) -> An
 
 def _ip_intel_cache_key(*, ip_address: str, lookup_url: str, has_api_key: bool) -> str:
     """Deterministic cache key over non-sensitive dimensions only."""
-    message = f"{ip_address}|{lookup_url}|auth={int(bool(has_api_key))}".encode("utf-8")
-    return hashlib.blake2b(message, digest_size=32).hexdigest()
+    return f"ip={str(ip_address or '').strip()}|url={str(lookup_url or '').strip()}|auth={int(bool(has_api_key))}"
 
 
 def _ip_intel_cache_get(cache_key: str) -> Optional[Dict[str, Any]]:
