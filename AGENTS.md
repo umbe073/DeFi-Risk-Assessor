@@ -113,3 +113,43 @@ The script uses defaults: remote tmp `/tmp/hodler-suite-web-portal/`, app dir `/
 
 After any correction: update `tasks/lessons.md` with the pattern.
 Tag `@codex` in PR comments to flag updates needed to this file.
+
+---
+
+## Cursor Cloud specific instructions
+
+### Services overview
+
+| Service | Path | Port | Start command |
+|---------|------|------|---------------|
+| Web Portal | `scripts/v2.0/web_portal/` | 5050 | `cd scripts/v2.0/web_portal && set -a && source .env && set +a && python3 run.py` |
+| Script API | `scripts/v2.8/` | 5001 | `cd scripts/v2.8 && python3 -c "from webhook_server import app; app.run(host='127.0.0.1', port=5001)"` |
+
+### Gotchas
+
+- **`.env` must be explicitly sourced**: The web portal does NOT call `load_dotenv()`. You must `source .env` before running `python3 run.py` or export vars manually.
+- **Local `.env` URLs**: For local development, set `WEB_PORTAL_PUBLIC_BASE_URL`, `WEB_PORTAL_APP_BASE_URL`, and `WEB_PORTAL_MARKETING_BASE_URL` to `http://127.0.0.1:5050` in `.env`. The production defaults (`https://app.hodler-suite.com`) cause session cookie domain mismatches on localhost.
+- **Missing private modules**: Several modules referenced by `app/routes/risk.py` (`chain_catalog`, `entitlements`, `hodler_chain_codes`, `runtime_paths`, `token_address_validation`, `token_list_csv`) are not committed to the repo. Development stubs are created during setup; they provide enough surface for the portal to boot and basic risk routes to function.
+- **`test_risk_event_sanitize.py`**: This test imports via `app.__init__` which cascades into the missing modules. It fails at collection unless stubs exist. Run portal tests with: `pytest tests/test_security_context.py`.
+- **`tests/system/test_icon_hiding.py` (v2.8)**: Requires `tkinter` (GUI); skip in headless environments. Run v2.8 tests with: `pytest tests/test_core.py tests/test_scorers.py`.
+- **blinker conflict**: The system `blinker 1.7.0` package lacks a RECORD file. Use `pip install --ignore-installed blinker` before installing Flask.
+
+### Lint & test commands
+
+```bash
+# v2.8 lint (matches CI pr-check.yml)
+flake8 scripts/v2.8 --max-line-length=120 --extend-ignore=E501,W503,E203
+
+# v2.8 tests (skip tkinter-dependent system tests)
+cd scripts/v2.8 && python3 -m pytest tests/test_core.py tests/test_scorers.py -v
+
+# Web portal lint
+cd scripts/v2.0/web_portal && python3 -m flake8 app tests --max-line-length=120 --extend-ignore=E501,W503,E203
+
+# Web portal tests
+cd scripts/v2.0/web_portal && python3 -m pytest tests/test_security_context.py -v
+```
+
+### Master account credentials (local dev)
+
+Defined in `.env` defaults: `admin@hodler-suite.com` / `change-master-password-now`
