@@ -4398,10 +4398,7 @@ def robust_request(method, url, **kwargs):
             if not quiet_http_errors:
                 print(f"❌ Request Error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}")
                 print(f"   URL: {_safe_url_for_log(url)}")
-                safe_method_for_log = str(method).upper()
-                if safe_method_for_log not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
-                    safe_method_for_log = "UNKNOWN"
-                print(f"   Method: {safe_method_for_log}")
+                print("   Method: [REDACTED]")
                 print(f"   Headers: {_redact_headers_for_log(kwargs.get('headers', {}))}")
             
             log_failed_api_endpoint(api_name_for_log, url, str(e))
