@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import ipaddress
 import json
 import os
@@ -258,10 +257,14 @@ def _open_lookup_request(req: urlrequest.Request, *, timeout_seconds: int) -> An
 
 
 def _ip_intel_cache_key(*, ip_address: str, lookup_url: str, api_key: str) -> str:
-    """HMAC-SHA256 cache key (avoids treating sensitive material as a 'password hash')."""
-    material = f"{ip_address}|{lookup_url}|{api_key}".encode("utf-8")
-    pepper = (os.environ.get("SECRET_KEY") or os.environ.get("IP_INTEL_CACHE_PEPPER") or "dev-ip-intel-cache").encode("utf-8")
-    return hmac.new(pepper, material, hashlib.sha256).hexdigest()
+    """Keyed Blake2b over (ip, URL): API key is MAC key material only, not digested as password input."""
+    message = f"{ip_address}|{lookup_url}".encode("utf-8")
+    raw_key = (api_key or "").encode("utf-8")
+    if len(raw_key) > 64:
+        raw_key = raw_key[:64]
+    if not raw_key:
+        raw_key = b"\x00"
+    return hashlib.blake2b(message, key=raw_key, digest_size=32).hexdigest()
 
 
 def _ip_intel_cache_get(cache_key: str) -> Optional[Dict[str, Any]]:

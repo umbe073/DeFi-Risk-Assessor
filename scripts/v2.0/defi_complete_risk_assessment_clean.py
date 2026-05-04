@@ -20533,20 +20533,53 @@ def update_progress_bar(percent, message):
             completed = int((percent / 100) * total_items)
             progress_bar.update(completed, message)
 
+
+def _cache_key_secret_safe_repr(mapping: object) -> str:
+    """Stable dict repr for cache keys: redact values whose keys look credential-bearing."""
+    if not mapping:
+        return ''
+    if not isinstance(mapping, dict):
+        return str(mapping)
+    rows = []
+    for name in sorted(mapping.keys(), key=lambda x: str(x).lower()):
+        ks = str(name)
+        lk = ks.lower().replace('-', '_')
+        redacted = (
+            lk
+            in {
+                'apikey',
+                'api_key',
+                'access_token',
+                'refresh_token',
+                'client_secret',
+                'password',
+                'secret',
+                'private_key',
+            }
+            or lk.endswith('_token')
+            or lk.endswith('_secret')
+            or lk.endswith('_password')
+            or ('api' in lk and lk.endswith('_key'))
+        )
+        rows.append((ks, '[redacted]' if redacted else mapping[name]))
+    return str(rows)
+
+
 def get_cache_key(url, params=None, headers=None, data=None):
-    """Generate a cache key for API requests"""
+    """Generate a cache key for API requests (SHA3-256 over redacted metadata; not password storage)."""
     key_parts = [url]
     if params:
-        key_parts.append(str(sorted(params.items())))
+        key_parts.append(_cache_key_secret_safe_repr(params))
     if headers:
-        # Exclude authorization headers from cache key
-        filtered_headers = {k: v for k, v in headers.items() 
-                          if k.lower() not in ['authorization', 'x-api-key']}
-        key_parts.append(str(sorted(filtered_headers.items())))
+        filtered_headers = {
+            k: v
+            for k, v in headers.items()
+            if str(k).lower() not in {'authorization', 'x-api-key', 'cookie'}
+        }
+        key_parts.append(_cache_key_secret_safe_repr(filtered_headers))
     if data:
-        key_parts.append(str(data))
-    # SHA-256: cache keys may embed URLs adjacent to sensitive params — avoid weak hashing.
-    return hashlib.sha256('|'.join(key_parts).encode()).hexdigest()
+        key_parts.append(_cache_key_secret_safe_repr(data) if isinstance(data, dict) else str(data))
+    return hashlib.sha3_256('|'.join(key_parts).encode('utf-8')).hexdigest()
 
 def fetch_vespia_authentication():
     """Authenticate with Vespia API and get access token"""
