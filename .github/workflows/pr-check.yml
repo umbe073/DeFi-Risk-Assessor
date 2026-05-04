@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -94,7 +96,23 @@ jobs:
             echo "No changed files to scan."
             exit 0
           fi
-          gitleaks detect --source "$scan_dir" --no-git --redact --exit-code 1
+          GL_CFG="${GITHUB_WORKSPACE}/.gitleaks.toml"
+          GL_ARGS=(detect --source "$scan_dir" --no-git --redact --exit-code 1)
+          if [ -f "$GL_CFG" ]; then
+            GL_ARGS+=(--config "$GL_CFG")
+          fi
+          report="${RUNNER_TEMP}/gitleaks.json"
+          set +e
+          gitleaks "${GL_ARGS[@]}" --report-format json --report-path "$report"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::gitleaks reported possible secrets in changed files (see JSON for RuleID and file paths)."
+            if [ -f "$report" ]; then
+              cat "$report"
+            fi
+            exit "$rc"
+          fi
 
       - name: Secret leak guard (forbidden files)
         run: |
