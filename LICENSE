@@ -1,23 +1,24 @@
-Proprietary — template pending legal sign-off
+Copyright © 2026 Hodler Suite UAB. All rights reserved.
 
-Copyright © 2026 [COMPANY_LEGAL_NAME]. All rights reserved.
+Hodler Suite UAB is a private limited liability company incorporated in the
+Republic of Lithuania.
 
 The software, documentation, configuration, and other materials in this
-repository are proprietary and confidential to [COMPANY_LEGAL_NAME].
+repository are proprietary and confidential trade secrets of Hodler Suite UAB.
 
-No license is granted except pursuant to a written agreement signed by an
-authorized representative of [COMPANY_LEGAL_NAME]. Without such an agreement,
-you may not use, copy, modify, merge, publish, distribute, sublicense, create
-derivative works of, or otherwise exploit any part of this repository.
+Except as expressly set forth in a written agreement signed by an authorized
+representative of Hodler Suite UAB, no license or right is granted to any
+person to use, copy, modify, merge, publish, distribute, sublicense, create
+derivative works from, publicly display, publicly perform, or otherwise exploit
+any portion of this repository.
 
-For licensing or partnership inquiries:
-  [COMMERCIAL_OR_LEGAL_CONTACT_EMAIL]
+Unauthorized use may violate applicable civil and criminal law.
 
----
-This file is a repository placeholder. Replace bracketed fields with your
-company’s exact legal name and contact, then have counsel approve the final
-text before you rely on it for enforcement, customer contracts, or M&A.
+Licensing and commercial inquiries:
+legal@hodler-suite.com
 
-Note: Earlier revisions of this repository may have been distributed under
-other terms. Historical commits may still reflect prior license headers; that
-does not automatically relicense past published artifacts—confirm with counsel.
+Prior publication: Earlier revisions of this software may have been made
+available under different license terms. Rights in those prior versions are
+governed by the terms applicable at the time of distribution. Historical commits
+in this repository may contain license headers reflecting earlier
+distributions.

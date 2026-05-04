@@ -1,8 +1,8 @@
 # DeFi-Risk-Assessor (Hodler Suite)
 
-**Access:** This repository is intended to be **private** to [COMPANY_LEGAL_NAME]. Do not share, fork, or mirror outside authorized systems. To make the GitHub project private: **Repository → Settings → General → Danger Zone → Change repository visibility → Make private** (requires org/repo admin; review GitHub’s notes on forks, stars, and integrations first).
+**Access:** This repository is **private** and belongs to **Hodler Suite UAB** (Lithuania). Do not share, fork, or mirror outside authorized systems. To change visibility on GitHub: **Repository → Settings → General → Danger Zone → Change repository visibility → Make private** (requires org/repo admin; review GitHub’s notes on forks, stars, and integrations first).
 
-**License:** The contents of this repository are **proprietary** unless a separate written agreement says otherwise. See `LICENSE` (replace placeholders after legal review).
+**License:** The contents of this repository are **proprietary** to Hodler Suite UAB unless a separate written agreement says otherwise. See `LICENSE`.
 
 ---
 

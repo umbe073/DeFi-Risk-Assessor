@@ -1,8 +1,8 @@
 # Contributing to Hodler Suite (private repository)
 
-This repository is **private** and **proprietary** to [COMPANY_LEGAL_NAME]. Contribution expectations apply to **employees, contractors, and others who have signed the appropriate confidentiality and IP assignment agreements** with the company. If you do not have such agreements in place, do not contribute.
+This repository is **private** and **proprietary** to **Hodler Suite UAB**, incorporated in the **Republic of Lithuania**. Contribution expectations apply to **employees, contractors, and others who have signed the appropriate confidentiality and IP assignment agreements** with Hodler Suite UAB. If you do not have such agreements in place, do not contribute.
 
-See `LICENSE` for ownership and use restrictions (replace placeholders after legal review).
+See `LICENSE` for ownership and use restrictions.
 
 ## Confidentiality
 

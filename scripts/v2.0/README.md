@@ -184,7 +184,7 @@ This tree is part of a **private, proprietary** repository. Contributing is limi
 
 ## License
 
-Proprietary — see the repository root `LICENSE` (legal sign-off required; replace placeholders).
+Proprietary — see the repository root `LICENSE` (Hodler Suite UAB, Lithuania).
 
 ## Support
 
