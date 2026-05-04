@@ -4371,7 +4371,7 @@ def robust_request(method, url, **kwargs):
                 time.sleep(delay)
             else:
                 if not quiet_http_errors:
-                    print(f"   Max retries reached for {_redact_url_query_for_log(url)}")
+                    print(f"   Max retries reached for host={_safe_url_hostname(url)}")
                 return None
     
     return None
