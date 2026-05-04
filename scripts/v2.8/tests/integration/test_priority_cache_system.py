@@ -9,6 +9,11 @@ import json
 import time
 from datetime import datetime
 
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_erc20_address_list
+
 # Add project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
 sys.path.append(PROJECT_ROOT)
@@ -57,13 +62,14 @@ def test_priority_data_fetching():
         print(f"❌ Error loading cache manager: {e}")
         return
     
-    # Test tokens
-    test_tokens = [
-        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",  # UNI
-        "0x514910771af9ca656af840dff83e8264ecf986ca",  # LINK
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"   # USDC
-    ]
-    
+    test_tokens = get_erc20_address_list()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping priority fetch tests "
+            "(set TEST_ETHEREUM_ERC20_ADDRESSES to mainnet ERC-20 addresses)."
+        )
+        return
+
     for token_address in test_tokens:
         print(f"\n📋 Testing priority fetching for {token_address}")
         
@@ -115,12 +121,14 @@ def test_fallback_data_retrieval():
         print(f"❌ Error loading cache manager: {e}")
         return
     
-    # Test tokens
-    test_tokens = [
-        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",  # UNI
-        "0x514910771af9ca656af840dff83e8264ecf986ca",  # LINK
-    ]
-    
+    test_tokens = get_erc20_address_list()[:2]
+    if len(test_tokens) < 1:
+        print(
+            "⏭️  Skipping fallback tests "
+            "(set TEST_ETHEREUM_ERC20_ADDRESSES with at least one address)."
+        )
+        return
+
     for token_address in test_tokens:
         print(f"\n📋 Testing fallback data for {token_address}")
         

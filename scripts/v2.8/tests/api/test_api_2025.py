@@ -9,6 +9,11 @@ import requests
 from datetime import datetime
 from pathlib import Path
 
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_single_erc20_contract, get_test_wallet
+
 # Add parent directories to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -27,9 +32,13 @@ def test_dune_2025():
     dune_chain_id = (os.getenv("DUNE_SIM_CHAIN_ID") or "1").strip()
     if not dune_chain_id.isdigit():
         dune_chain_id = "1"
-    test_token = (os.getenv("DUNE_TEST_TOKEN_ADDRESS") or "0xdAC17F958D2ee523a2206206994597C13D831ec7").strip()
+    test_token = (os.getenv("DUNE_TEST_TOKEN_ADDRESS") or "").strip() or (get_single_erc20_contract() or "")
     if not (test_token.startswith("0x") and len(test_token) == 42):
-        test_token = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        print(
+            "⏭️  Skipping SIM Dune token test: set DUNE_TEST_TOKEN_ADDRESS "
+            "or TEST_ETHEREUM_ERC20_CONTRACT to a 40-nibble ERC-20 address."
+        )
+        return False
 
     headers = {
         'X-Sim-Api-Key': api_key,
@@ -89,9 +98,14 @@ def test_breadcrumbs_2025():
     }
     
     try:
-        # Test with a known address (Ethereum Foundation)
-        test_address = "0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe"
-        
+        test_address = (os.getenv("TEST_BREADCRUMBS_ADDRESS") or "").strip() or (get_test_wallet() or "")
+        if not (test_address.startswith("0x") and len(test_address) == 42):
+            print(
+                "⏭️  Skipping Breadcrumbs address test: set TEST_BREADCRUMBS_ADDRESS "
+                "or TEST_ETHEREUM_WALLET to a mainnet EOA you may query."
+            )
+            return False
+
         # Test 1: Risk score endpoint
         print("\n1️⃣ Testing risk score endpoint...")
         url = f"{base_url}/address/{test_address}/risk-score"

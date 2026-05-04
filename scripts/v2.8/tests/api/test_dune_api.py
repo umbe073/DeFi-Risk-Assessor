@@ -8,6 +8,11 @@ import os
 import json
 from datetime import datetime
 
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_test_erc20_token, get_test_wallet
+
 # Add the current directory to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -42,11 +47,18 @@ def test_dune_api():
     print("✅ Dune Analytics API initialized successfully")
     print(f"🔑 API Key: {api.api_key[:10]}...")
     
-    # Test addresses
-    test_wallet = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"  # Vitalik's wallet
-    test_token = "0xA0b86a33E6441b8c4C8C1C1B9C9C9C9C9C9C9C9C"  # Example token
+    # Test addresses (never hardcode; set env for live calls)
+    test_wallet = get_test_wallet() or ""
+    test_token = get_test_erc20_token() or ""
     test_chain_id = 1  # Ethereum mainnet
-    
+
+    if not test_wallet or not test_token:
+        print(
+            "⏭️  Skipping Dune live tests: set TEST_ETHEREUM_WALLET and "
+            "TEST_ETHEREUM_ERC20_TOKEN to mainnet addresses."
+        )
+        return False
+
     print(f"\n📊 Testing with wallet: {test_wallet}")
     print(f"🪙 Testing with token: {test_token}")
     print(f"⛓️ Testing with chain ID: {test_chain_id}")

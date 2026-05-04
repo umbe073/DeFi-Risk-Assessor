@@ -30,6 +30,4 @@ regexes = [
   '''(?i)confidential trade secrets''',
   '''(?i)proprietary and confidential''',
   '''(?i)legal@hodler-suite\.com''',
-  # Public Ethereum contract (Uniswap UNI token) used in API smoke tests — not an API key.
-  '''0x1f9840a85d5af5bf1d1762f925bdaddc4201f984''',
 ]

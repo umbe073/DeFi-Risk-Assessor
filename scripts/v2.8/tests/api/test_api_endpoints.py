@@ -4,10 +4,16 @@ Test script to verify individual API endpoints and identify issues
 """
 
 import os
+import sys
 import json
 import requests
 import time
 from dotenv import load_dotenv
+
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_single_erc20_contract
 
 # Load environment variables
 load_dotenv('/Users/amlfreak/Desktop/venv/.env')
@@ -54,21 +60,26 @@ def test_coingecko_endpoints():
     except Exception as e:
         print(f"❌ CoinGecko Search API exception: {e}")
     
-    # Test 3: Contract address lookup
+    # Test 3: Contract address lookup (address from TEST_ETHEREUM_ERC20_CONTRACT only)
     try:
-        # Public UNI token contract (mainnet); not a generic API key.
-        uni_contract = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
-        url = f"https://api.coingecko.com/api/v3/coins/ethereum/contract/{uni_contract}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            print("✅ CoinGecko Contract Address API working")
-            market_data = data.get('market_data', {})
-            print(f"   UNI Token: ${market_data.get('current_price', {}).get('usd', 0):.2f}")
+        erc20 = get_single_erc20_contract()
+        if not erc20:
+            print(
+                "⏭️  Skipping CoinGecko contract lookup "
+                "(set TEST_ETHEREUM_ERC20_CONTRACT to a mainnet ERC-20 address)."
+            )
         else:
-            print(f"❌ CoinGecko Contract Address API error: {response.status_code}")
-            if response.status_code == 429:
-                print("   ⚠️ Rate limited! This might be why tokens show $0")
+            url = f"https://api.coingecko.com/api/v3/coins/ethereum/contract/{erc20}"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ CoinGecko Contract Address API working")
+                market_data = data.get('market_data', {})
+                print(f"   Token: ${market_data.get('current_price', {}).get('usd', 0):.2f}")
+            else:
+                print(f"❌ CoinGecko Contract Address API error: {response.status_code}")
+                if response.status_code == 429:
+                    print("   ⚠️ Rate limited! This might be why tokens show $0")
     except Exception as e:
         print(f"❌ CoinGecko Contract Address API exception: {e}")
 
@@ -126,30 +137,37 @@ def test_etherscan_endpoints():
         print("❌ Etherscan API key not found")
         return
     
-    # Test 1: Token holder count
+    # Test 1: Token holder count (contract from TEST_ETHEREUM_ERC20_CONTRACT only)
     try:
-        url = "https://api.etherscan.io/api"
-        params = {
-            'module': 'token',
-            'action': 'tokenholderlist',
-            'contractaddress': '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',  # UNI
-            'page': 1,
-            'offset': 1,
-            'apikey': api_key
-        }
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('status') == '1':
-                print("✅ Etherscan Token Holder API working")
-                result = data.get('result', [])
-                if result:
-                    print("   UNI Token holders data available")
-            else:
-                print(f"❌ Etherscan Token Holder API error: {data.get('message', 'Unknown error')}")
-                print("   ⚠️ This might be why holder counts show 0")
+        erc20 = get_single_erc20_contract()
+        if not erc20:
+            print(
+                "⏭️  Skipping Etherscan token holder call "
+                "(set TEST_ETHEREUM_ERC20_CONTRACT to a mainnet ERC-20 address)."
+            )
         else:
-            print(f"❌ Etherscan Token Holder API HTTP error: {response.status_code}")
+            url = "https://api.etherscan.io/api"
+            params = {
+                'module': 'token',
+                'action': 'tokenholderlist',
+                'contractaddress': erc20,
+                'page': 1,
+                'offset': 1,
+                'apikey': api_key
+            }
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == '1':
+                    print("✅ Etherscan Token Holder API working")
+                    result = data.get('result', [])
+                    if result:
+                        print("   Token holder sample returned")
+                else:
+                    print(f"❌ Etherscan Token Holder API error: {data.get('message', 'Unknown error')}")
+                    print("   ⚠️ This might be why holder counts show 0")
+            else:
+                print(f"❌ Etherscan Token Holder API HTTP error: {response.status_code}")
     except Exception as e:
         print(f"❌ Etherscan Token Holder API exception: {e}")
     
@@ -197,22 +215,27 @@ def test_ethplorer_endpoints():
     print("\n🔍 Testing Ethplorer API Endpoints")
     print("=" * 60)
     
-    # Test token info
+    # Test token info (contract from TEST_ETHEREUM_ERC20_CONTRACT only)
     try:
-        # Public UNI token contract (mainnet); not a generic API key.
-        uni_contract = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
-        url = f"https://api.ethplorer.io/getTokenInfo/{uni_contract}?apiKey=freekey"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            print("✅ Ethplorer Token Info API working")
-            if 'holdersCount' in data:
-                print(f"   UNI Holders: {data['holdersCount']:,}")
-            if 'price' in data:
-                print(f"   UNI Price: ${data['price'].get('rate', 0):.4f}")
+        erc20 = get_single_erc20_contract()
+        if not erc20:
+            print(
+                "⏭️  Skipping Ethplorer token info "
+                "(set TEST_ETHEREUM_ERC20_CONTRACT to a mainnet ERC-20 address)."
+            )
         else:
-            print(f"❌ Ethplorer Token Info API error: {response.status_code}")
-            print(f"   Response: {response.text[:200]}")
+            url = f"https://api.ethplorer.io/getTokenInfo/{erc20}?apiKey=freekey"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ Ethplorer Token Info API working")
+                if 'holdersCount' in data:
+                    print(f"   Holders: {data['holdersCount']:,}")
+                if 'price' in data:
+                    print(f"   Price: ${data['price'].get('rate', 0):.4f}")
+            else:
+                print(f"❌ Ethplorer Token Info API error: {response.status_code}")
+                print(f"   Response: {response.text[:200]}")
     except Exception as e:
         print(f"❌ Ethplorer Token Info API exception: {e}")
 

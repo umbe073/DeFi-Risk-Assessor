@@ -8,6 +8,11 @@ import sys
 import json
 import requests
 
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_erc20_address_list, get_erc20_pairs
+
 # Add project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
 sys.path.append(PROJECT_ROOT)
@@ -18,13 +23,15 @@ def test_ethplorer_direct():
     """Test Ethplorer API directly"""
     print("\n🔍 Testing Ethplorer API Direct Calls")
     print("=" * 60)
-    
-    test_tokens = [
-        ("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", "UNI"),
-        ("0x514910771af9ca656af840dff83e8264ecf986ca", "LINK"), 
-        ("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "USDC")
-    ]
-    
+
+    test_tokens = get_erc20_pairs()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping Ethplorer direct tests "
+            "(set TEST_ETHEREUM_ERC20_PAIRS e.g. 0x...:TOKEN,0x...:TOKEN2)."
+        )
+        return
+
     for token_address, symbol in test_tokens:
         print(f"\n📋 Testing {symbol} ({token_address})")
         
@@ -66,13 +73,14 @@ def test_coingecko_direct():
     print("\n🔍 Testing CoinGecko API Direct Calls")
     print("=" * 60)
     
-    # Test contract address lookup
-    test_tokens = [
-        ("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", "UNI"),
-        ("0x514910771af9ca656af840dff83e8264ecf986ca", "LINK"), 
-        ("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "USDC")
-    ]
-    
+    test_tokens = get_erc20_pairs()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping CoinGecko contract tests "
+            "(set TEST_ETHEREUM_ERC20_PAIRS e.g. 0x...:TOKEN)."
+        )
+        return
+
     for token_address, symbol in test_tokens:
         print(f"\n📋 Testing {symbol} ({token_address})")
         
@@ -151,13 +159,14 @@ def check_current_cache_state():
         tokens = cache.get('tokens', {})
         print(f"Cache has {len(tokens)} tokens")
         
-        # Check a few specific tokens
-        test_addresses = [
-            "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",  # UNI
-            "0x514910771af9ca656af840dff83e8264ecf986ca",  # LINK
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"   # USDC
-        ]
-        
+        test_addresses = get_erc20_address_list()
+        if not test_addresses:
+            print(
+                "⏭️  No TEST_ETHEREUM_ERC20_ADDRESSES set; listing cache keys only "
+                "(set env to probe specific contracts)."
+            )
+            test_addresses = []
+
         for addr in test_addresses:
             if addr in tokens:
                 token_data = tokens[addr]
