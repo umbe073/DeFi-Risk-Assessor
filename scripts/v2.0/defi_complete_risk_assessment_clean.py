@@ -74,29 +74,11 @@ def _safe_url_hostname(url: str) -> str:
 
 
 def _redact_url_query_for_log(url: str) -> str:
-    """Strip sensitive query keys before printing URLs to stdout/logs."""
-    # Match common credential key variants after normalization (e.g. apiKey/api_key/api-key -> apikey)
-    sensitive = {
-        'apikey', 'key', 'token', 'accesstoken', 'idtoken', 'refreshtoken',
-        'secret', 'clientsecret', 'password', 'passwd', 'pwd', 'auth', 'authorization',
-        'signature', 'sig'
-    }
-
-    def _normalize_query_key(key: object) -> str:
-        k = str(key or '').strip().lower()
-        return ''.join(ch for ch in k if ch.isalnum())
-
+    """Return a log-safe URL by removing query-string and fragment entirely."""
     try:
         parsed = urlparse(str(url or ''))
-        if not parsed.query:
-            return str(url or '')
-        pairs = parse_qsl(parsed.query, keep_blank_values=True)
-        redacted = [
-            (k, '[redacted]' if _normalize_query_key(k) in sensitive else v)
-            for k, v in pairs
-        ]
-        new_query = urlencode(redacted)
-        return urlunparse(parsed._replace(query=new_query))
+        # Keep only endpoint identity (scheme/netloc/path); never log query/fragment.
+        return urlunparse(parsed._replace(query='', fragment=''))
     except Exception:
         return '[unparseable_url]'
 
@@ -130,12 +112,11 @@ def _safe_url_for_log(url: str) -> str:
 
 
 def _redact_params_for_log(params: object) -> str:
-    """Describe request params without printing values (may include API keys)."""
+    """Describe request params without printing values or sensitive key names."""
     if params is None:
         return 'none'
     if isinstance(params, dict):
-        keys = sorted(str(k) for k in params.keys())
-        return 'param_keys=' + ','.join(keys) if keys else 'params_empty'
+        return f'params_dict(count={len(params)})'
     if isinstance(params, (list, tuple)):
         return f'{type(params).__name__}(len={len(params)})'
     return 'params=[omitted]'
@@ -4178,7 +4159,7 @@ def robust_request(method, url, **kwargs):
                 time.sleep(delay)
             else:
                 if not quiet_http_errors:
-                    print(f"   Max retries reached for host={_safe_url_hostname(url)}")
+                    print(f"   Max retries reached for service={resolved_service_name}")
                 return None
     
     return None

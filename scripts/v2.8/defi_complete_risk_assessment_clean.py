@@ -138,15 +138,14 @@ def _redact_headers_for_log(headers: object) -> dict:
 
 
 def _redact_params_for_log(params: object) -> str:
-    """Describe request params without printing values (may include API keys)."""
+    """Describe request params using only safe metadata (never keys/values)."""
     if params is None:
-        return 'none'
+        return 'params_none'
     if isinstance(params, dict):
-        keys = sorted(str(k) for k in params.keys())
-        return 'param_keys=' + ','.join(keys) if keys else 'params_empty'
+        return f'params_dict(count={len(params)})'
     if isinstance(params, (list, tuple)):
         return f'{type(params).__name__}(len={len(params)})'
-    return 'params=[omitted]'
+    return 'params_present'
 
 
 # Legacy cache management functions (fallback)
@@ -4358,11 +4357,11 @@ def robust_request(method, url, **kwargs):
             if response.status_code >= 400:
                 if response.status_code in [401, 403, 404, 429]:
                     if not quiet_http_errors:
-                        print(f"    ❌ HTTP {response.status_code} error for {_redact_url_query_for_log(url)}")
+                        print(f"    ❌ HTTP {response.status_code} error for {_safe_url_for_log(url)}")
                 
                 if response.status_code not in [404]:
                     if not quiet_http_errors:
-                        print(f"❌ API Error: {response.status_code} {response.reason} for {_redact_url_query_for_log(url)}")
+                        print(f"❌ API Error: {response.status_code} {response.reason} for {_safe_url_for_log(url)}")
                         if kwargs.get('params'):
                             print(f"   Params: {_redact_params_for_log(kwargs.get('params'))}")
                         
@@ -4393,7 +4392,7 @@ def robust_request(method, url, **kwargs):
                 time.sleep(delay)
             else:
                 if not quiet_http_errors:
-                    print(f"   Max retries reached for host={_safe_url_hostname(url)}")
+                    print("   Max retries reached")
                 return None
     
     return None
