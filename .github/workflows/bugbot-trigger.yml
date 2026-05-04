@@ -1,8 +1,8 @@
-name: Bugbot Trigger
+name: Cursor Agent Review Trigger
 
-# Workaround for Cursor Bugbot's automatic-review path getting stuck on
+# Workaround for Cursor/Bugbot automatic-review paths getting stuck on
 # "Expected — Waiting for status to be reported". The manual comment trigger
-# (`bugbot run`) goes through a different path that has been more reliable.
+# (`@cursoragent review`) goes through a different review path.
 # We post it once when a PR opens / reopens / leaves draft, and once per push
 # if Bugbot has not posted a status yet for the new HEAD commit.
 #
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   trigger-bugbot:
-    name: Comment "bugbot run" on PR
+    name: Comment "@cursoragent review" on PR
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request != null && github.event.pull_request.draft == false }}
     timeout-minutes: 3
@@ -46,7 +46,7 @@ jobs:
             // Always trigger when a PR opens / reopens / becomes ready-for-review.
             if (['opened', 'reopened', 'ready_for_review'].includes(action)) {
               core.setOutput('post', 'true');
-              core.info(`Action ${action}: will post bugbot run on #${prNumber}.`);
+              core.info(`Action ${action}: will post @cursoragent review on #${prNumber}.`);
               return;
             }
 
@@ -74,10 +74,10 @@ jobs:
               core.setOutput('post', 'false');
               return;
             }
-            core.info(`No Bugbot status on ${HEAD_SHA}; will post bugbot run.`);
+            core.info(`No Bugbot status on ${HEAD_SHA}; will post @cursoragent review.`);
             core.setOutput('post', 'true');
 
-      - name: Post bugbot run comment
+      - name: Post cursoragent review comment
         if: steps.gate.outputs.post == 'true'
         uses: actions/github-script@v8
         env:
@@ -89,6 +89,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              body: 'bugbot run',
+              body: '@cursoragent review',
             });
-            core.info(`Posted "bugbot run" on PR #${prNumber}.`);
+            core.info(`Posted "@cursoragent review" on PR #${prNumber}.`);
