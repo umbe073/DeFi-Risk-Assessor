@@ -35,7 +35,7 @@ cleanup_data_cache.py
 # ── Secrets & credentials ─────────────────────────────────────────────────────
 .env
 .env.*
-!.env.example
+!/.env.example
 .secure_credentials
 .master_key
 *.pem
@@ -85,11 +85,23 @@ defi_dashboard_locks/
 !/SECURITY.md
 !/.github/
 !/.github/**
+!/docs/
+!/docs/security/
+!/docs/security/**
 !/scripts/
 !/scripts/v2.8/
 !/scripts/v2.8/**
 /scripts/v2.8/web_portal/
 /scripts/v2.8/web_portal/**
+
+# ── Operational / manual-only (never publish): web portal, VPS playbooks, v2.8 deploy ──
+# These trees stay on operator workstations or the server; they are not part of the public Git scope.
+/scripts/v2.0/web_portal/
+/scripts/v2.0/web_portal/**
+/scripts/v2.0/deploy/
+/scripts/v2.0/deploy/**
+/scripts/v2.8/deploy/
+/scripts/v2.8/deploy/**
 
 # Additional hard blocks for secrets/runtime artifacts under v2.8.
 /scripts/v2.8/**/*.env

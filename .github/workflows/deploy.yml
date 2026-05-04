@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Auto deploy v2.8 with rollback
@@ -16,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Configure SSH
         env:
@@ -39,23 +42,6 @@ jobs:
           ssh-keygen -y -P '' -f ~/.ssh/deploy_key >/dev/null
           ssh-keyscan -p "${DEPLOY_SSH_PORT:-22}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Deploy script to server
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            -p "${DEPLOY_PORT:-22}" \
-            -o StrictHostKeyChecking=no \
-            "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${{ secrets.DEPLOY_PATH }}/scripts/v2.8/deploy'"
-          scp -i ~/.ssh/deploy_key \
-            -P "${DEPLOY_PORT:-22}" \
-            -o StrictHostKeyChecking=no \
-            scripts/v2.8/deploy/auto_sync_and_deploy.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${{ secrets.DEPLOY_PATH }}/scripts/v2.8/deploy/auto_sync_and_deploy.sh"
-
       - name: Run remote deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -68,6 +54,7 @@ jobs:
           DEPLOY_HEALTH_URL_APP: ${{ secrets.DEPLOY_HEALTH_URL_APP }}
           DEPLOY_HEALTH_URL_SCRIPT: ${{ secrets.DEPLOY_HEALTH_URL_SCRIPT }}
         run: |
+          # Server-side auto_sync_and_deploy.sh is maintained in private ops (not copied from this repository).
           ssh -i ~/.ssh/deploy_key \
             -p "${DEPLOY_PORT:-22}" \
             -o StrictHostKeyChecking=no \
@@ -76,7 +63,7 @@ jobs:
 
       - name: Notify Slack — success
         if: success()
-        uses: slackapi/slack-github-action@v3.0.3
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
           webhook: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
           webhook-type: incoming-webhook
@@ -85,7 +72,7 @@ jobs:
 
       - name: Notify Slack — failure
         if: failure()
-        uses: slackapi/slack-github-action@v3.0.3
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
           webhook: ${{ secrets.SLACK_GITHUB_PULL_REQUESTS_WEBHOOK_URL }}
           webhook-type: incoming-webhook

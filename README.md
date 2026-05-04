@@ -2,9 +2,12 @@
 
 Hodler Suite is proprietary SaaS software owned by **Hodler Suite UAB**.
 
-This repository contains the private application code, risk-engine automation,
-web portal assets, deployment tooling, CI/CD workflows, and internal operations
-documentation used to build and operate Hodler Suite. It is not an open-source
+This repository contains application code for the risk engine and script API,
+CI/CD workflows, and documentation used to build and operate Hodler Suite.
+Operational assets (Flask web portal tree, VPS bootstrap/playbooks, and
+server-side deploy scripts under `scripts/v2.0/web_portal`, `scripts/v2.0/deploy`,
+and `scripts/v2.8/deploy`) are **not** published here — maintain those locally
+or on approved private storage. It is not an open-source
 project and is not licensed for public redistribution, reuse, resale, or
 self-hosting.
 
@@ -33,9 +36,9 @@ The platform:
 
 ## Repository Layout
 
-- `scripts/v2.8/` is the GitHub source-of-truth for app/risk code and GitOps
-  deploy assets.
-- `scripts/v2.0/web_portal/` is the manually deployed Flask web portal.
+- `scripts/v2.8/` is the GitHub source-of-truth for app/risk code.
+- The Flask web portal, `scripts/v2.0/deploy`, and `scripts/v2.8/deploy` are
+  excluded from Git scope (manual / private ops).
 - `.github/workflows/` contains CI, deploy, CodeQL, Slack, and automation
   workflows.
 - `docs/` contains internal and public-documentation source material where

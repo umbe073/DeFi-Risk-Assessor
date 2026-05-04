@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Process Slack reaction
-        uses: actions/github-script@v9
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         env:
           ALLOWED_SLACK_CHANNELS: ${{ vars.ALLOWED_SLACK_CHANNELS }}
           MERGE_METHOD: ${{ vars.SLACK_PR_MERGE_METHOD }}

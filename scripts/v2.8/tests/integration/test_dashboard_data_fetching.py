@@ -7,7 +7,11 @@ import os
 import sys
 import json
 import requests
-from datetime import datetime
+
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_erc20_address_list, get_erc20_pairs
 
 # Add project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
@@ -19,13 +23,15 @@ def test_ethplorer_direct():
     """Test Ethplorer API directly"""
     print("\n🔍 Testing Ethplorer API Direct Calls")
     print("=" * 60)
-    
-    test_tokens = [
-        ("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", "UNI"),
-        ("0x514910771af9ca656af840dff83e8264ecf986ca", "LINK"), 
-        ("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "USDC")
-    ]
-    
+
+    test_tokens = get_erc20_pairs()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping Ethplorer direct tests "
+            "(set TEST_ETHEREUM_ERC20_PAIRS e.g. 0x...:TOKEN,0x...:TOKEN2)."
+        )
+        return
+
     for token_address, symbol in test_tokens:
         print(f"\n📋 Testing {symbol} ({token_address})")
         
@@ -40,7 +46,7 @@ def test_ethplorer_direct():
                 price = data.get('price', {})
                 volume = data.get('volume24h', 0)
                 
-                print(f"   ✅ Success!")
+                print("   ✅ Success!")
                 print(f"   Holders: {holders:,}")
                 print(f"   Price: ${price.get('rate', 0):.4f}" if price else "   Price: N/A")
                 print(f"   Volume 24h: ${volume:,.0f}")
@@ -53,7 +59,7 @@ def test_ethplorer_direct():
                         market_cap = price_usd * supply
                         print(f"   Market Cap: ${market_cap:,.0f}")
                     except:
-                        print(f"   Market Cap: Unable to calculate")
+                        print("   Market Cap: Unable to calculate")
                         
             else:
                 print(f"   ❌ Error: {response.status_code}")
@@ -67,13 +73,14 @@ def test_coingecko_direct():
     print("\n🔍 Testing CoinGecko API Direct Calls")
     print("=" * 60)
     
-    # Test contract address lookup
-    test_tokens = [
-        ("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", "UNI"),
-        ("0x514910771af9ca656af840dff83e8264ecf986ca", "LINK"), 
-        ("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "USDC")
-    ]
-    
+    test_tokens = get_erc20_pairs()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping CoinGecko contract tests "
+            "(set TEST_ETHEREUM_ERC20_PAIRS e.g. 0x...:TOKEN)."
+        )
+        return
+
     for token_address, symbol in test_tokens:
         print(f"\n📋 Testing {symbol} ({token_address})")
         
@@ -89,13 +96,13 @@ def test_coingecko_direct():
                 market_cap = market_data.get('market_cap', {}).get('usd', 0)
                 volume = market_data.get('total_volume', {}).get('usd', 0)
                 
-                print(f"   ✅ Success!")
+                print("   ✅ Success!")
                 print(f"   Price: ${price:,.4f}")
                 print(f"   Market Cap: ${market_cap:,.0f}")
                 print(f"   Volume 24h: ${volume:,.0f}")
                 
             elif response.status_code == 429:
-                print(f"   ⚠️ Rate limited! This explains empty cache data")
+                print("   ⚠️ Rate limited! This explains empty cache data")
             else:
                 print(f"   ❌ Error: {response.status_code}")
                 print(f"   Response: {response.text[:100]}")
@@ -152,13 +159,14 @@ def check_current_cache_state():
         tokens = cache.get('tokens', {})
         print(f"Cache has {len(tokens)} tokens")
         
-        # Check a few specific tokens
-        test_addresses = [
-            "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",  # UNI
-            "0x514910771af9ca656af840dff83e8264ecf986ca",  # LINK
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"   # USDC
-        ]
-        
+        test_addresses = get_erc20_address_list()
+        if not test_addresses:
+            print(
+                "⏭️  No TEST_ETHEREUM_ERC20_ADDRESSES set; listing cache keys only "
+                "(set env to probe specific contracts)."
+            )
+            test_addresses = []
+
         for addr in test_addresses:
             if addr in tokens:
                 token_data = tokens[addr]
@@ -194,5 +202,5 @@ if __name__ == "__main__":
     test_coingecko_direct()
     test_simple_coingecko()
     
-    print(f"\n✅ Dashboard data fetching test completed!")
+    print("\n✅ Dashboard data fetching test completed!")
     print("💡 Compare API results with current cache state to identify issues")

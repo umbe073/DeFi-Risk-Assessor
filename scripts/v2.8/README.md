@@ -2,7 +2,7 @@
 
 ## Overview
 
-`scripts/v2.8` is the GitHub source-of-truth for the app/risk-assessment code that is deployed by GitHub Actions.
+`scripts/v2.8` is the GitHub source-of-truth for the app/risk-assessment code that is deployed by GitHub Actions (using a **server-side** deploy driver maintained outside this repository).
 It was migrated forward from the older `scripts/v2.0` desktop-oriented tree, but the production runtime can still stay on
 `scripts/v2.0` on the server.
 
@@ -43,11 +43,10 @@ On a push to `main`, GitHub Actions:
 
 1. Checks out the repository.
 2. Configures SSH from GitHub Actions secrets.
-3. Copies `scripts/v2.8/deploy/auto_sync_and_deploy.sh` to the server.
-4. Runs the server-side deploy script.
-5. The server script fetches `origin/main`, resets the checkout, backs up the runtime target, syncs `scripts/v2.8` to the runtime target, restarts services, and runs health checks.
+3. Runs the **server-side** `auto_sync_and_deploy.sh` (maintained in private ops on the server — it is **not** copied from this repository).
+4. That script fetches `origin/main`, resets the checkout, backs up the runtime target, syncs `scripts/v2.8` to the runtime target, restarts services, and runs health checks.
 
-Important deploy paths:
+Important deploy paths (documented in internal runbooks, not in Git):
 
 - `DEPLOY_PATH`: Git checkout root on the server, for example `/opt/defi-risk/app`.
 - `DEPLOY_RUNTIME_TARGET_DIR`: runtime target, for example `/opt/defi-risk/app/scripts/v2.8`.
@@ -55,11 +54,7 @@ Important deploy paths:
 
 Do not set `DEPLOY_RUNTIME_TARGET_DIR` to `DEPLOY_PATH` itself. The runtime target must be the app `scripts` subtree used by services, not the repository root.
 
-See:
-
-- `deploy/GITOPS_SETUP.md`
-- `deploy/OPERATING_MODEL.md`
-- `deploy/auto_sync_and_deploy.sh`
+Operational docs (`GITOPS_SETUP.md`, `OPERATING_MODEL.md`, bootstrap scripts) live next to the deploy driver on the server or in private storage — not in this repository.
 
 ## Website / Web Portal Scope
 
@@ -67,12 +62,7 @@ The web portal and website deployment path is still manual unless a separate dec
 
 In this repo, `scripts/v2.8/web_portal/` is excluded from normal GitHub scope. Portal changes should be deployed with the existing safe portal deployment script, then verified on the server.
 
-Manual portal deploy reference:
-
-```bash
-cd /Users/amlfreak/Desktop/venv
-bash scripts/v2.0/web_portal/deploy/deploy_web_portal_safe.sh linuxuser@80.240.31.172
-```
+Manual portal deploy uses your **private** web portal checkout and internal SSH targets (not documented here).
 
 ## Data Publication
 
@@ -95,7 +85,7 @@ The deploy script still excludes `data/` when syncing `scripts/v2.8` into the se
 From the repository root:
 
 ```bash
-cd /Users/amlfreak/Desktop/venv
+cd /path/to/DeFi-Risk-Assessor
 python3 scripts/v2.8/defi_complete_risk_assessment_clean.py
 ```
 
