@@ -124,14 +124,15 @@ def _redact_params_for_log(params: object) -> str:
 
 
 def _summarize_ethplorer_error_payload(error_data: object) -> str:
-    """Summarize Ethplorer JSON error responses without logging full payloads (may contain secrets)."""
+    """Summarize Ethplorer JSON error responses without logging payload values (may contain secrets)."""
     if not isinstance(error_data, dict):
         return 'non_dict_payload'
     err_obj = error_data.get('error')
     if isinstance(err_obj, dict):
         msg = str(err_obj.get('message', ''))
-        code = err_obj.get('code', '')
-        return f'code={code!r} message_len={len(msg)}'
+        if msg:
+            return f'ethplorer_error_with_message_len={len(msg)}'
+        return 'ethplorer_error_without_message'
     return 'unknown_error_shape'
 
 
