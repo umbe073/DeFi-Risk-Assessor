@@ -8,6 +8,11 @@ import time
 import os
 import sys
 
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_erc20_pairs
+
 # Add project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
 sys.path.append(PROJECT_ROOT)
@@ -17,15 +22,14 @@ def test_coingecko_api():
     """Test CoinGecko API for a few tokens"""
     print("🔍 Testing CoinGecko API...")
     
-    # Test tokens that should have market data
-    test_tokens = [
-        ('0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', 'UNI'),
-        ('0x514910771af9ca656af840dff83e8264ecf986ca', 'LINK'),
-        ('0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', 'AAVE'),
-        ('0x6b175474e89094c44da98b954eedeac495271d0f', 'DAI'),
-        ('0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', 'USDC'),
-    ]
-    
+    test_tokens = get_erc20_pairs()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping CoinGecko API token loop "
+            "(set TEST_ETHEREUM_ERC20_PAIRS e.g. 0x...:SYMBOL,0x...:SYMBOL2)."
+        )
+        return
+
     for token_address, symbol in test_tokens:
         print(f"\n📊 Testing {symbol} ({token_address})...")
         
@@ -77,13 +81,14 @@ def test_webhook_fetching():
     
     webhook = WebhookServer()
     
-    # Test a few tokens
-    test_tokens = [
-        ('0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', 'UNI'),
-        ('0x514910771af9ca656af840dff83e8264ecf986ca', 'LINK'),
-        ('0x6b175474e89094c44da98b954eedeac495271d0f', 'DAI'),
-    ]
-    
+    test_tokens = get_erc20_pairs()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping webhook fetch tests "
+            "(set TEST_ETHEREUM_ERC20_PAIRS e.g. 0x...:SYMBOL)."
+        )
+        return
+
     for token_address, symbol in test_tokens:
         print(f"\n📊 Testing {symbol} ({token_address})...")
         

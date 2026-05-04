@@ -26,10 +26,11 @@ else
   echo "[smoke] no python files under ${V2_DIR} yet"
 fi
 
-echo "[smoke] checking hardcoded v2.0 leftovers (excluding archive/ and this script)"
-# ripgrep's glob rules make multi-glob excludes brittle across versions; use find+grep so
-# archive/obsolete_scripts and this file are always skipped.
-pattern='/scripts/v2\.0|/venv/data/risk_reports|/venv/data/social_reports'
+echo "[smoke] checking hardcoded local-machine leftovers (excluding archive/ and this script)"
+# Use find+grep so archive/obsolete_scripts and this file are always skipped (ripgrep multi-glob
+# excludes are brittle across versions and can still scan archive/).
+# Do not match /opt/.../scripts/v2.0 (legitimate server fallbacks) or /home/runner/... checkouts.
+pattern='/Users/[^[:space:]]*scripts/v2\.(0|8)|/venv/data/risk_reports|/venv/data/social_reports'
 found=0
 while IFS= read -r -d '' f; do
   if grep -qE "${pattern}" "$f" 2>/dev/null; then

@@ -4,7 +4,6 @@ Unit tests for scorers module
 """
 
 import unittest
-from unittest.mock import Mock
 
 from modules.scorers import (
     MarketDataScorer,

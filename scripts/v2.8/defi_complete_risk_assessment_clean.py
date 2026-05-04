@@ -4,6 +4,7 @@ import sys
 import time
 import csv
 import json
+import zlib
 import hashlib
 import hmac
 import base64
@@ -21,7 +22,7 @@ import pickle
 from pathlib import Path
 import shutil
 import tempfile
-from urllib.parse import urlparse, urlencode
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from email.utils import parsedate_to_datetime
 
 
@@ -69,14 +70,84 @@ def _build_webhook_headers(payload_bytes: bytes = b'', *, include_signature: boo
     if include_signature:
         timestamp = str(int(time.time()))
         signed_payload = f'{timestamp}.'.encode('utf-8') + (payload_bytes or b'')
-        signature = hmac.new(
+        signature = hmac.digest(
             WEBHOOK_SHARED_SECRET.encode('utf-8'),
             signed_payload,
-            hashlib.sha256,
-        ).hexdigest()
+            'sha3_256',
+        ).hex()
         headers['X-Webhook-Timestamp'] = timestamp
-        headers['X-Webhook-Signature'] = f'sha256={signature}'
+        headers['X-Webhook-Signature'] = f'sha3_256={signature}'
     return headers
+
+
+def _hostname_matches_root(hostname: str, root_domain: str) -> bool:
+    """True if hostname is the registrable host or a subdomain of root_domain (avoids 'in str' checks)."""
+    host = (hostname or '').strip().lower().strip('.')
+    root = (root_domain or '').strip().lower().strip('.')
+    if not host or not root:
+        return False
+    return host == root or host.endswith('.' + root)
+
+
+def _safe_url_hostname(url: str) -> str:
+    try:
+        return str(urlparse(str(url or '').strip()).hostname or '').lower().strip().strip('.')
+    except Exception:
+        return ''
+
+
+def _safe_url_for_log(url: str) -> str:
+    """Return a URL safe for logs by removing query string and fragment entirely."""
+    try:
+        parsed = urlparse(str(url or '').strip())
+        return urlunparse(parsed._replace(query='', fragment=''))
+    except Exception:
+        return '[unparseable_url]'
+
+
+def _redact_url_query_for_log(url: str) -> str:
+    """Redact all query parameter values before printing URLs to stdout/logs."""
+    try:
+        parsed = urlparse(str(url or ''))
+        if not parsed.query:
+            return str(url or '')
+        pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        redacted = [(k, '[redacted]') for k, _v in pairs]
+        new_query = urlencode(redacted)
+        return urlunparse(parsed._replace(query=new_query))
+    except Exception:
+        return '[unparseable_url]'
+
+
+def _redact_headers_for_log(headers: object) -> dict:
+    if not isinstance(headers, dict):
+        return {}
+    masked_keys = {
+        'authorization',
+        'cookie',
+        'x-api-key',
+        'x-cg-pro-api-key',
+        'x-cg-demo-api-key',
+        'x-webhook-signature',
+        'x-webhook-timestamp',
+    }
+    out = {}
+    for key, value in headers.items():
+        lk = str(key or '').lower()
+        out[str(key)] = '[redacted]' if lk in masked_keys else value
+    return out
+
+
+def _redact_params_for_log(params: object) -> str:
+    """Describe request params using only safe metadata (never keys/values)."""
+    if params is None:
+        return 'params_none'
+    if isinstance(params, dict):
+        return f'params_dict(count={len(params)})'
+    if isinstance(params, (list, tuple)):
+        return f'{type(params).__name__}(len={len(params)})'
+    return 'params_present'
+
 
 # Legacy cache management functions (fallback)
 def load_cached_data(token_address):
@@ -515,6 +586,8 @@ def log_failed_api_endpoint(api_name, endpoint, error_message):
     global failed_api_endpoints
     now_iso = datetime.datetime.now().isoformat()
     key = _failed_endpoint_key(api_name, endpoint, error_message)
+    safe_api_name = str(api_name or "unknown").strip().lower() or "unknown"
+    safe_error_message = str(error_message or "unknown").strip()
 
     with _failed_api_endpoints_lock:
         existing_idx = _failed_api_endpoint_index.get(key)
@@ -535,8 +608,8 @@ def log_failed_api_endpoint(api_name, endpoint, error_message):
         failed_api_endpoints.append(failed_endpoint)
         _failed_api_endpoint_index[key] = len(failed_api_endpoints) - 1
 
-    # Also log to console (first occurrence only)
-    print(f"❌ API Error: {error_message} for {endpoint}")
+    # Also log to console (first occurrence only) without endpoint details to avoid leaking secrets
+    print(f"❌ API Error [{safe_api_name}]: {safe_error_message}")
 
 def write_failed_endpoints_summary():
     """Write failed API endpoints to summary file"""
@@ -3435,35 +3508,32 @@ def _canonical_service_name(value):
 
 def _service_name_from_url(url):
     """Best-effort service mapping from request URL."""
-    try:
-        host = str(urlparse(str(url or '')).netloc or '').lower()
-    except Exception:
-        host = ''
+    host = _safe_url_hostname(url)
     if not host:
         return ''
-    if 'coingecko.com' in host:
+    if _hostname_matches_root(host, 'coingecko.com'):
         return 'coingecko'
-    if 'dexscreener.com' in host:
+    if _hostname_matches_root(host, 'dexscreener.com'):
         return 'dexscreener'
-    if 'coinmarketcap.com' in host:
+    if _hostname_matches_root(host, 'coinmarketcap.com'):
         return 'coinmarketcap'
-    if 'coincap.io' in host:
+    if _hostname_matches_root(host, 'coincap.io'):
         return 'coincap'
-    if 'etherscan.io' in host:
+    if _hostname_matches_root(host, 'etherscan.io'):
         return 'etherscan'
-    if 'moralis.io' in host:
+    if _hostname_matches_root(host, 'moralis.io'):
         return 'moralis'
-    if 'solscan.io' in host:
+    if _hostname_matches_root(host, 'solscan.io'):
         return 'solscan'
-    if 'birdeye.so' in host:
+    if _hostname_matches_root(host, 'birdeye.so'):
         return 'birdeye'
-    if 'solanatracker.io' in host:
+    if _hostname_matches_root(host, 'solanatracker.io'):
         return 'solanatracker'
-    if 'sim.dune.com' in host:
+    if host == 'sim.dune.com' or _hostname_matches_root(host, 'dune.com'):
         return 'dune'
-    if 'gopluslabs.io' in host:
+    if _hostname_matches_root(host, 'gopluslabs.io'):
         return 'goplus'
-    if 'oklink.com' in host:
+    if _hostname_matches_root(host, 'oklink.com'):
         return 'oklink'
     return ''
 
@@ -3783,21 +3853,31 @@ def _load_request_policy_settings():
     return policy
 
 
-def _http_state_request_key(url, params=None):
-    """Build stable request key for conditional request metadata."""
-    base = str(url or '').strip()
-    if not base:
+def _mapping_key_names_fingerprint(mapping: object) -> str:
+    """Sorted key names only (no values) for stable fingerprints without sensitive data."""
+    if not mapping:
         return ''
-    if not params:
-        return base
-    try:
-        if isinstance(params, dict):
-            encoded = urlencode(sorted((str(k), str(v)) for k, v in params.items()), doseq=True)
-        else:
-            encoded = str(params)
-    except Exception:
-        encoded = str(params)
-    return f"{base}?{encoded}" if encoded else base
+    if not isinstance(mapping, dict):
+        return type(mapping).__name__
+    return ','.join(sorted(str(k) for k in mapping.keys()))
+
+
+def _http_cache_coordination_digest(parts: list[str]) -> str:
+    """Non-cryptographic cache bucket label (zlib CRC32; not password/storage hashing)."""
+    joined = '|'.join(parts)
+    b = joined.encode('utf-8')
+    c1 = zlib.crc32(b) & 0xFFFFFFFF
+    c2 = zlib.crc32(str(len(b)).encode('ascii'), c1) & 0xFFFFFFFF
+    return f'{c1:08x}{c2:08x}'
+
+
+def _http_state_request_key(url, params=None):
+    """Stable key for conditional GET metadata (no raw query secrets on disk)."""
+    red = _redact_url_query_for_log(str(url or '').strip())
+    if not red:
+        return ''
+    keys = _mapping_key_names_fingerprint(params) if params else ''
+    return _http_cache_coordination_digest([red, keys])
 
 
 def _load_http_request_state():
@@ -4034,7 +4114,8 @@ def robust_request(method, url, **kwargs):
 
     def _is_chainabuse_request(api_name_value, request_url):
         name = _api_name_key(api_name_value)
-        return name == 'chainabuse' or 'api.chainabuse.com' in str(request_url or '').lower()
+        host = _safe_url_hostname(request_url)
+        return name == 'chainabuse' or host == 'api.chainabuse.com'
 
     def _parse_retry_after_seconds(response):
         try:
@@ -4212,7 +4293,8 @@ def robust_request(method, url, **kwargs):
     base_delay = max(0.1, float(request_policy.get('retry_backoff_seconds', 0.2) or 0.2))
     max_blocking_wait = 3.0
     is_chainabuse = _is_chainabuse_request(api_name_for_log, url)
-    is_coingecko = resolved_service_name == 'coingecko' or 'api.coingecko.com' in str(url or '').lower()
+    url_host_cg = _safe_url_hostname(url)
+    is_coingecko = resolved_service_name == 'coingecko' or _hostname_matches_root(url_host_cg, 'coingecko.com')
     cooldown_key = resolved_service_name or api_name_for_log
     if is_chainabuse:
         max_retries = max(max_retries, 3)
@@ -4265,7 +4347,7 @@ def robust_request(method, url, **kwargs):
                     'default': 2
                 }
                 
-                domain = url.split('/')[2] if '/' in url else 'default'
+                domain = _safe_url_hostname(url) or 'default'
                 if is_chainabuse:
                     retry_after = _parse_retry_after_seconds(response)
                     delay = _chainabuse_backoff_delay(attempt, retry_after)
@@ -4296,13 +4378,13 @@ def robust_request(method, url, **kwargs):
             if response.status_code >= 400:
                 if response.status_code in [401, 403, 404, 429]:
                     if not quiet_http_errors:
-                        print(f"    ❌ HTTP {response.status_code} error for {url}")
+                        print(f"    ❌ HTTP {response.status_code} error for {_safe_url_for_log(url)}")
                 
                 if response.status_code not in [404]:
                     if not quiet_http_errors:
-                        print(f"❌ API Error: {response.status_code} {response.reason} for {url}")
+                        print(f"❌ API Error: {response.status_code} {response.reason} for {_safe_url_for_log(url)}")
                         if kwargs.get('params'):
-                            print(f"   Params: {kwargs.get('params', {})}")
+                            print(f"   Params: {_redact_params_for_log(kwargs.get('params'))}")
                         
                         if response.status_code not in [401, 403, 404, 429] and response.text:
                             print(f"   Response: {response.text[:200]}...")
@@ -4314,10 +4396,10 @@ def robust_request(method, url, **kwargs):
             
         except requests.exceptions.RequestException as e:
             if not quiet_http_errors:
-                print(f"❌ Request Error (attempt {attempt + 1}/{max_retries}): {e}")
-                print(f"   URL: {url}")
+                print(f"❌ Request Error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}")
+                print(f"   URL: {_safe_url_for_log(url)}")
                 print(f"   Method: {method}")
-                print(f"   Headers: {kwargs.get('headers', {})}")
+                print(f"   Headers: {_redact_headers_for_log(kwargs.get('headers', {}))}")
             
             log_failed_api_endpoint(api_name_for_log, url, str(e))
             
@@ -4331,7 +4413,7 @@ def robust_request(method, url, **kwargs):
                 time.sleep(delay)
             else:
                 if not quiet_http_errors:
-                    print(f"   Max retries reached for {url}")
+                    print("   Max retries reached")
                 return None
     
     return None
@@ -9998,8 +10080,8 @@ class DeFiRiskAssessor:
                 api_key = (COINGECKO_API_KEY or '').strip()
                 if not api_key:
                     return variants
-                host = (urlparse(str(base_url or '')).netloc or '').strip().lower()
-                if host.startswith('pro-api.coingecko.com'):
+                host = (urlparse(str(base_url or '')).hostname or '').strip().lower()
+                if host == 'pro-api.coingecko.com':
                     if COINGECKO_KEY_MODE == 'pro':
                         return [
                             {**coingecko_common_headers, 'x-cg-pro-api-key': api_key},
@@ -10700,8 +10782,8 @@ class DeFiRiskAssessor:
                 key = (COINGECKO_API_KEY or '').strip()
                 if not key:
                     return [common_headers]
-                host = (urlparse(str(base_url or '')).netloc or '').strip().lower()
-                if host.startswith('pro-api.coingecko.com'):
+                host = (urlparse(str(base_url or '')).hostname or '').strip().lower()
+                if host == 'pro-api.coingecko.com':
                     if COINGECKO_KEY_MODE == 'pro':
                         return [
                             {**common_headers, 'x-cg-pro-api-key': key},
@@ -13301,16 +13383,20 @@ class DeFiRiskAssessor:
             fallback_data = cache_data.get('fallback_data', {})
             
             # Map URL patterns to fallback data types
-            if 'coingecko.com' in domain:
-                if 'coins' in url:
+            host = str(domain or '').strip().lower()
+            if not host and url:
+                host = _safe_url_hostname(str(url or ''))
+            path = str(urlparse(str(url or '')).path or '')
+            if _hostname_matches_root(host, 'coingecko.com'):
+                if '/coins' in path or path.endswith('coins') or 'coins' in path:
                     return fallback_data.get('market_data', {}).get('coingecko', None)
-            elif 'coinmarketcap.com' in domain:
+            elif _hostname_matches_root(host, 'coinmarketcap.com'):
                 return fallback_data.get('market_data', {}).get('cmc', None)
-            elif 'etherscan.io' in domain:
+            elif _hostname_matches_root(host, 'etherscan.io'):
                 return fallback_data.get('onchain_data', {}).get('etherscan', None)
-            elif 'moralis.io' in domain:
+            elif _hostname_matches_root(host, 'moralis.io'):
                 return fallback_data.get('onchain_data', {}).get('moralis', None)
-            elif 'twitter.com' in domain:
+            elif _hostname_matches_root(host, 'twitter.com'):
                 return fallback_data.get('social_data', {}).get('twitter', None)
             
             return None
@@ -20939,19 +21025,22 @@ def update_progress_bar(percent, message):
             completed = int((percent / 100) * total_items)
             progress_bar.update(completed, message)
 
+
 def get_cache_key(url, params=None, headers=None, data=None):
-    """Generate a cache key for API requests"""
-    key_parts = [url]
+    """Generate a cache key from redacted URL plus key names only (no secret values)."""
+    parts = [_redact_url_query_for_log(str(url or '').strip())]
     if params:
-        key_parts.append(str(sorted(params.items())))
+        parts.append(_mapping_key_names_fingerprint(params))
     if headers:
-        # Exclude authorization headers from cache key
-        filtered_headers = {k: v for k, v in headers.items() 
-                          if k.lower() not in ['authorization', 'x-api-key']}
-        key_parts.append(str(sorted(filtered_headers.items())))
+        filtered_headers = {
+            k: v
+            for k, v in headers.items()
+            if str(k).lower() not in {'authorization', 'x-api-key', 'cookie'}
+        }
+        parts.append(_mapping_key_names_fingerprint(filtered_headers))
     if data:
-        key_parts.append(str(data))
-    return hashlib.md5('|'.join(key_parts).encode()).hexdigest()
+        parts.append(_mapping_key_names_fingerprint(data))
+    return _http_cache_coordination_digest(parts)
 
 def fetch_vespia_authentication():
     """Authenticate with Vespia API and get access token"""

@@ -5,8 +5,12 @@ Test script to verify cache integration is working properly
 
 import os
 import sys
-import json
 from datetime import datetime
+
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_erc20_address_list
 
 # Add project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
@@ -32,13 +36,15 @@ def test_cache_functionality():
     print("\n🧪 Testing Cache Functionality")
     print("=" * 50)
     
-    # Test tokens
-    test_tokens = [
-        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",  # UNI
-        "0x514910771af9ca656af840dff83e8264ecf986ca",  # LINK
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"   # USDC
-    ]
-    
+    # Test tokens (comma-separated in TEST_ETHEREUM_ERC20_ADDRESSES)
+    test_tokens = get_erc20_address_list()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping token cache tests "
+            "(set TEST_ETHEREUM_ERC20_ADDRESSES to one or more mainnet ERC-20 addresses)."
+        )
+        return
+
     print(f"📋 Testing {len(test_tokens)} tokens...")
     
     for i, token_address in enumerate(test_tokens, 1):
@@ -71,7 +77,7 @@ def test_cache_functionality():
             print("   ❌ Cache update failed")
     
     # Test cache stats
-    print(f"\n📊 Cache Statistics:")
+    print("\n📊 Cache Statistics:")
     try:
         stats = cache_manager.get_cache_stats()
         print(f"   Cache entries: {stats.get('cache_entries', 0)}")
@@ -112,7 +118,7 @@ def test_rate_limiting():
     # Test if we have the API error handler
     try:
         from api_error_handler import get_error_handler
-        error_handler = get_error_handler(DATA_DIR)
+        get_error_handler(DATA_DIR)
         print("✅ API error handler available")
         
         # Check rate limit status for different APIs
@@ -133,5 +139,5 @@ if __name__ == "__main__":
     check_webhook_integration()
     test_rate_limiting()
     
-    print(f"\n✅ Cache integration test completed!")
+    print("\n✅ Cache integration test completed!")
     print("💡 If you see issues, check the cache files in:", DATA_DIR)

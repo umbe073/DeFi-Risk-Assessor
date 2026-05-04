@@ -9,6 +9,11 @@ import json
 import time
 from datetime import datetime
 
+_TESTS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _TESTS_ROOT not in sys.path:
+    sys.path.insert(0, _TESTS_ROOT)
+from env_test_addresses import get_erc20_address_list
+
 # Add project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
 sys.path.append(PROJECT_ROOT)
@@ -29,14 +34,14 @@ def test_cache_preservation():
         return
     
     # Check current cache configuration
-    print(f"📊 Cache Configuration:")
+    print("📊 Cache Configuration:")
     print(f"   Cache duration: {cache_manager.cache_duration_hours} hours")
     print(f"   Preserve duration: {cache_manager.preserve_duration_hours} hours")
     print(f"   Max cache size: {cache_manager.max_cache_size_mb} MB")
     
     # Check current cache stats
     stats = cache_manager.get_cache_stats()
-    print(f"\n📊 Current Cache Statistics:")
+    print("\n📊 Current Cache Statistics:")
     print(f"   Cache tokens: {stats.get('cache_tokens', 0)}")
     print(f"   Fallback tokens: {stats.get('fallback_tokens', 0)}")
     print(f"   Cache hits: {stats.get('cache_hits', 0)}")
@@ -57,13 +62,14 @@ def test_priority_data_fetching():
         print(f"❌ Error loading cache manager: {e}")
         return
     
-    # Test tokens
-    test_tokens = [
-        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",  # UNI
-        "0x514910771af9ca656af840dff83e8264ecf986ca",  # LINK
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"   # USDC
-    ]
-    
+    test_tokens = get_erc20_address_list()
+    if not test_tokens:
+        print(
+            "⏭️  Skipping priority fetch tests "
+            "(set TEST_ETHEREUM_ERC20_ADDRESSES to mainnet ERC-20 addresses)."
+        )
+        return
+
     for token_address in test_tokens:
         print(f"\n📋 Testing priority fetching for {token_address}")
         
@@ -94,11 +100,11 @@ def test_priority_data_fetching():
         try:
             result = cache_manager.fetch_data_with_intelligent_cache(token_address, mock_fetch_function)
             if result:
-                print(f"   ✅ Priority fetching successful")
+                print("   ✅ Priority fetching successful")
                 print(f"   Market data sources: {list(result.get('market_data', {}).keys())}")
                 print(f"   Onchain data sources: {list(result.get('onchain_data', {}).keys())}")
             else:
-                print(f"   ⚠️ No data returned")
+                print("   ⚠️ No data returned")
         except Exception as e:
             print(f"   ❌ Error: {e}")
 
@@ -115,24 +121,26 @@ def test_fallback_data_retrieval():
         print(f"❌ Error loading cache manager: {e}")
         return
     
-    # Test tokens
-    test_tokens = [
-        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",  # UNI
-        "0x514910771af9ca656af840dff83e8264ecf986ca",  # LINK
-    ]
-    
+    test_tokens = get_erc20_address_list()[:2]
+    if len(test_tokens) < 1:
+        print(
+            "⏭️  Skipping fallback tests "
+            "(set TEST_ETHEREUM_ERC20_ADDRESSES with at least one address)."
+        )
+        return
+
     for token_address in test_tokens:
         print(f"\n📋 Testing fallback data for {token_address}")
         
         try:
             fallback_data = cache_manager.get_fallback_data(token_address)
             if fallback_data:
-                print(f"   ✅ Fallback data available")
+                print("   ✅ Fallback data available")
                 data_age = (time.time() - fallback_data.get('timestamp', 0)) / 3600
                 print(f"   Age: {data_age:.1f} hours")
                 print(f"   Source: {fallback_data.get('source', 'unknown')}")
             else:
-                print(f"   ⚠️ No fallback data available")
+                print("   ⚠️ No fallback data available")
         except Exception as e:
             print(f"   ❌ Error: {e}")
 
@@ -154,7 +162,7 @@ def test_webhook_integration():
             print(f"   Cache age: {data.get('cache_age_hours', 0):.2f} hours")
             
             # Test cache update with priority system
-            print(f"\n🔄 Testing priority-based cache update...")
+            print("\n🔄 Testing priority-based cache update...")
             update_response = requests.post('http://localhost:5001/webhook/update_all', 
                                           json={}, timeout=30)
             if update_response.status_code == 200:
@@ -234,7 +242,7 @@ def test_cleanup_functionality():
         
         # Check stats after cleanup
         stats = cache_manager.get_cache_stats()
-        print(f"📊 After cleanup:")
+        print("📊 After cleanup:")
         print(f"   Cache tokens: {stats.get('cache_tokens', 0)}")
         print(f"   Fallback tokens: {stats.get('fallback_tokens', 0)}")
         
@@ -253,7 +261,7 @@ if __name__ == "__main__":
     test_data_preservation()
     test_cleanup_functionality()
     
-    print(f"\n✅ Priority-based cache system test completed!")
+    print("\n✅ Priority-based cache system test completed!")
     print("💡 The system should now:")
     print("   1. Preserve data for 48 hours")
     print("   2. Use priority-based fetching strategy")

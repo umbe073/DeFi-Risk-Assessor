@@ -15,6 +15,7 @@ import hmac
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
+import uuid
 
 # Align chain normalization / deep-health allow-list with `web_portal/app/hodler_chain_codes.py`
 _WEB_PORTAL_ROOT = Path(__file__).resolve().parent / "web_portal"
@@ -233,13 +234,12 @@ def _verify_webhook_signature(payload: bytes) -> tuple[bool, str]:
         return False, 'stale_signature'
 
     signed_payload = f'{timestamp_int}.'.encode('utf-8') + (payload or b'')
-    expected = 'sha256=' + hmac.new(
-        WEBHOOK_SHARED_SECRET.encode('utf-8'),
-        signed_payload,
-        hashlib.sha256,
-    ).hexdigest()
-
-    if not hmac.compare_digest(expected.lower(), signature.lower()):
+    key = WEBHOOK_SHARED_SECRET.encode('utf-8')
+    expected = 'sha3_256=' + hmac.digest(key, signed_payload, 'sha3_256').hex()
+    sig_norm = signature.strip().lower()
+    if not sig_norm.startswith('sha3_256='):
+        return False, 'invalid_signature_scheme'
+    if not hmac.compare_digest(expected.lower(), sig_norm):
         return False, 'invalid_signature'
 
     return True, 'ok'
@@ -3656,7 +3656,8 @@ def _build_chain_deep_health_snapshot(chain_hint: str) -> tuple[dict[str, Any], 
     if chain_code not in supported_chains:
         return ({
             'status': 'error',
-            'message': f'unsupported_chain:{chain_hint}',
+            'message': 'unsupported_chain',
+            'chain_hint': ''.join(ch for ch in str(chain_hint or '') if ch.isalnum() or ch in {'_', '-'})[:32],
             'supported_chains': sorted(supported_chains),
             'timestamp': datetime.now().isoformat(),
         }, 404)
@@ -3903,7 +3904,8 @@ def get_cache():
         }
         return jsonify(cache_data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.exception('dashboard_cache_status_failed: %s', e)
+        return jsonify({'error': 'internal_error', 'correlation_id': str(uuid.uuid4())}), 500
 
 @app.route('/webhook/health', methods=['GET'])
 def health_check():

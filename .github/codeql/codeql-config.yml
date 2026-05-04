@@ -2,9 +2,9 @@ name: "CodeQL Config"
 
 # CodeQL scope for Hodler Suite.
 #
-# Only two trees are deployed in production:
-#   - scripts/v2.0/web_portal  (excluded from repo — private Flask portal)
-#   - scripts/v2.8             (current engine, systemd service)
+# Shipped from this repository: scripts/v2.8 app/risk code. Web portal and deploy
+# playbooks are private/manual (not in Git). Production also uses a private web_portal
+# tree under scripts/v2.0 on the server; see paths-ignore below.
 #
 # We use `paths-ignore` only (CodeQL Python autobuild is unhappy with explicit
 # `paths:` filters on this repo). The ignore list keeps legacy versions, archived
@@ -27,6 +27,7 @@ paths-ignore:
   - scripts/v2.0/fixes/**
   - scripts/v2.0/tests/**
   - scripts/v2.0/deploy/**
+  - scripts/v2.0/web_portal/**
   # v2.8 archived/obsolete + tests are not part of the deployed surface.
   - scripts/v2.8/archive/**
   - scripts/v2.8/tests/**

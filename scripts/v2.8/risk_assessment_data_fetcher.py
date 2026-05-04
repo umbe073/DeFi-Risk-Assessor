@@ -51,13 +51,13 @@ def _webhook_headers(payload_bytes: bytes = b'', *, include_signature: bool = Fa
     if include_signature:
         timestamp = str(int(datetime.now().timestamp()))
         signed_payload = f'{timestamp}.'.encode('utf-8') + (payload_bytes or b'')
-        signature = hmac.new(
+        signature = hmac.digest(
             WEBHOOK_SHARED_SECRET.encode('utf-8'),
             signed_payload,
-            hashlib.sha256,
-        ).hexdigest()
+            'sha3_256',
+        ).hex()
         headers['X-Webhook-Timestamp'] = timestamp
-        headers['X-Webhook-Signature'] = f'sha256={signature}'
+        headers['X-Webhook-Signature'] = f'sha3_256={signature}'
     return headers
 
 # Import multi-API fetcher
