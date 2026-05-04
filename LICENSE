@@ -1,23 +1,23 @@
-Proprietary — template pending legal sign-off
+# Proprietary License
 
-Copyright © 2026 [COMPANY_LEGAL_NAME]. All rights reserved.
+Copyright © 2026 Hodler Suite UAB. All rights reserved.
 
 The software, documentation, configuration, and other materials in this
-repository are proprietary and confidential to [COMPANY_LEGAL_NAME].
+repository are proprietary and confidential to Hodler Suite UAB.
 
 No license is granted except pursuant to a written agreement signed by an
-authorized representative of [COMPANY_LEGAL_NAME]. Without such an agreement,
-you may not use, copy, modify, merge, publish, distribute, sublicense, create
-derivative works of, or otherwise exploit any part of this repository.
+authorized representative of Hodler Suite UAB. Without such an agreement, you
+may not access, use, copy, modify, merge, publish, distribute, sublicense,
+create derivative works of, reverse engineer, host, operate, or otherwise
+exploit any part of this repository or any derived SaaS service.
 
-For licensing or partnership inquiries:
-  [COMMERCIAL_OR_LEGAL_CONTACT_EMAIL]
+This repository is intended for authorized Hodler Suite UAB personnel,
+contractors, service providers, and approved integration partners only. Access
+to the repository does not grant any ownership, license, customer usage right,
+deployment right, resale right, or right to disclose the materials.
 
----
-This file is a repository placeholder. Replace bracketed fields with your
-company’s exact legal name and contact, then have counsel approve the final
-text before you rely on it for enforcement, customer contracts, or M&A.
+All third-party libraries, APIs, SDKs, and services used by the project remain
+subject to their own licenses, terms, and policies.
 
-Note: Earlier revisions of this repository may have been distributed under
-other terms. Historical commits may still reflect prior license headers; that
-does not automatically relicense past published artifacts—confirm with counsel.
+For licensing, partnership, or security-related legal enquiries, contact
+[compliance@hodler-suite.com](mailto:compliance@hodler-suite.com).

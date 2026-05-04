@@ -1,13 +1,21 @@
-# Contributing to Hodler Suite (private repository)
+# Contributing to Hodler Suite
 
-This repository is **private** and **proprietary** to [COMPANY_LEGAL_NAME]. Contribution expectations apply to **employees, contractors, and others who have signed the appropriate confidentiality and IP assignment agreements** with the company. If you do not have such agreements in place, do not contribute.
+This repository is private, proprietary, and owned by **Hodler Suite UAB**.
+Contribution expectations apply only to employees, contractors, service
+providers, and approved partners who are authorized to access this repository
+and are covered by the required confidentiality and intellectual-property
+agreements with Hodler Suite UAB.
 
-See `LICENSE` for ownership and use restrictions (replace placeholders after legal review).
+If you do not have written authorization from Hodler Suite UAB, do not access
+or contribute to this repository.
+
+See `LICENSE` for ownership and use restrictions.
 
 ## Confidentiality
 
 - Treat all code, issues, pull requests, CI logs, attachments, and internal links as **confidential**.
 - Do **not** paste customer data, credentials, webhook secrets, production URLs with tokens, or regulated personal data into issues or PR descriptions.
+- Do **not** mirror this repository, publish snippets, or disclose architecture details outside approved Hodler Suite UAB systems.
 - Follow `SECURITY.md` for vulnerability reporting.
 
 ## Project layout

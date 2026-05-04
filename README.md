@@ -1,25 +1,58 @@
-# DeFi-Risk-Assessor (Hodler Suite)
+# Hodler Suite
 
-**Access:** This repository is intended to be **private** to [COMPANY_LEGAL_NAME]. Do not share, fork, or mirror outside authorized systems. To make the GitHub project private: **Repository → Settings → General → Danger Zone → Change repository visibility → Make private** (requires org/repo admin; review GitHub’s notes on forks, stars, and integrations first).
+Hodler Suite is proprietary SaaS software owned by **Hodler Suite UAB**.
 
-**License:** The contents of this repository are **proprietary** unless a separate written agreement says otherwise. See `LICENSE` (replace placeholders after legal review).
+This repository contains the private application code, risk-engine automation,
+web portal assets, deployment tooling, CI/CD workflows, and internal operations
+documentation used to build and operate Hodler Suite. It is not an open-source
+project and is not licensed for public redistribution, reuse, resale, or
+self-hosting.
 
----
+## Access And Use
 
-The DeFi Complete Risk Assessment Suite is a Python-based engine for automated, explainable token risk assessments. It is designed for AML analysts, hedge funds, listing managers, exchanges, and institutional risk teams who need a consistent way to evaluate DeFi tokens across multiple chains and data providers.
+Access is limited to authorized Hodler Suite UAB employees, contractors,
+service providers, and approved integration partners. Do not share, fork,
+mirror, publish, or copy repository contents outside approved company systems.
 
-What this engine does?
+See `LICENSE` for proprietary use restrictions.
 
-- Aggregates many external services (on‑chain explorers, RPCs, market data, blockchain analytics, sanctions/compliance and social/news sources).
-- Normalizes them into behavioral categories (market structure, smart‑contract safety, governance/transparency, regulatory posture, social reputation).
-- Computes a numeric risk score plus component scores and red‑flag boosts, suitable for onboarding decisions, watchlists and surveillance.
-- Provides EU‑specific and global risk profiles through a configurable EU‑mode.
-- Produces machine‑readable outputs (CSV, JSON, XLSX) for dashboards and downstream analytics.
-- For a narrative overview of the system and its value proposition, see the “DeFi Risk Assessment Suite – Pre‑Release Whitepaper” PDF in the repository root.
+## Product Summary
 
-Target audience:
+Hodler Suite provides automated and explainable token-risk assessment workflows
+for digital-asset risk, AML, listing review, and monitoring teams.
 
-AML / Compliance analysts who need to interpret scores and understand why a token is flagged.
-Quant and DeFi researchers who want to audit or extend scoring logic.
-Exchange listing / risk teams who need repeatable onboarding criteria.
-Engineers integrating the suite into dashboards, monitoring pipelines or case‑management tools.
+The platform:
+
+- Aggregates on-chain, market, security, compliance, and social/news signals.
+- Normalizes provider data into risk categories and operational summaries.
+- Computes token-level risk scores, confidence signals, and red flags.
+- Supports EU-specific and global risk profiles.
+- Produces machine-readable reports and SaaS dashboard outputs.
+- Provides operator tooling for API health, service status, support workflows,
+  billing reconciliation, and deployment observability.
+
+## Repository Layout
+
+- `scripts/v2.8/` is the GitHub source-of-truth for app/risk code and GitOps
+  deploy assets.
+- `scripts/v2.0/web_portal/` is the manually deployed Flask web portal.
+- `.github/workflows/` contains CI, deploy, CodeQL, Slack, and automation
+  workflows.
+- `docs/` contains internal and public-documentation source material where
+  applicable.
+
+## Contribution Model
+
+This is a private-company repository. Contributions are accepted only from
+authorized contributors who are covered by the required confidentiality,
+employment, contractor, vendor, and intellectual-property agreements with
+Hodler Suite UAB.
+
+See `CONTRIBUTING.md` for engineering workflow expectations.
+
+## Security
+
+Do not open public issues for suspected vulnerabilities, secrets exposure,
+authentication bypasses, payment issues, or data-handling risks.
+
+See `SECURITY.md` for the private reporting and triage process.

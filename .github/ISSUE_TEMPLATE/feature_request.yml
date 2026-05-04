@@ -1,5 +1,5 @@
-name: Feature request
-description: Suggest an improvement or new capability.
+name: Internal feature request
+description: Suggest an improvement or new capability for the Hodler Suite UAB SaaS platform.
 title: "feat: "
 labels: ["enhancement", "needs-triage"]
 body:
@@ -7,7 +7,7 @@ body:
     id: problem
     attributes:
       label: Problem
-      description: What problem should this solve?
+      description: What customer, operator, compliance, or engineering problem should this solve?
       placeholder: Describe the user or operator pain point.
     validations:
       required: true
@@ -62,7 +62,7 @@ body:
     attributes:
       label: Scope notes
       options:
-        - label: This request does not include secrets or private customer data.
+        - label: This request does not include secrets, private customer data, or confidential business context beyond what reviewers need.
           required: true
         - label: I understand website/web_portal changes may require the manual deploy path.
           required: false

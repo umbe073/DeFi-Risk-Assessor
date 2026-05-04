@@ -2,4 +2,4 @@ blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
     url: https://github.com/ddos-revenge/DeFi-Risk-Assessor/security/advisories
-    about: Please report suspected vulnerabilities privately. See SECURITY.md.
+    about: Private Hodler Suite UAB vulnerability reporting. See SECURITY.md.
