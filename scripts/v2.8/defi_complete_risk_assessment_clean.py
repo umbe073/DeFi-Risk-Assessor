@@ -3842,15 +3842,23 @@ def _load_request_policy_settings():
     return policy
 
 
+def _mapping_key_names_fingerprint(mapping: object) -> str:
+    """Sorted key names only (no values) for stable fingerprints without sensitive data."""
+    if not mapping:
+        return ''
+    if not isinstance(mapping, dict):
+        return type(mapping).__name__
+    return ','.join(sorted(str(k) for k in mapping.keys()))
+
+
 def _http_state_request_key(url, params=None):
     """Stable key for conditional GET metadata (no raw query secrets on disk)."""
-    base = str(url or '').strip()
-    if not base:
+    red = _redact_url_query_for_log(str(url or '').strip())
+    if not red:
         return ''
-    if not params:
-        return base
-    safe = _cache_key_secret_safe_repr(params) if isinstance(params, dict) else str(params)
-    return hashlib.sha3_256(f'{base}|{safe}'.encode('utf-8')).hexdigest()
+    keys = _mapping_key_names_fingerprint(params) if params else ''
+    payload = f'{red}|{keys}'
+    return hashlib.sha3_256(payload.encode('utf-8')).hexdigest()
 
 
 def _load_http_request_state():
@@ -21052,52 +21060,21 @@ def update_progress_bar(percent, message):
             progress_bar.update(completed, message)
 
 
-def _cache_key_secret_safe_repr(mapping: object) -> str:
-    """Stable dict repr for cache keys: redact values whose keys look credential-bearing."""
-    if not mapping:
-        return ''
-    if not isinstance(mapping, dict):
-        return str(mapping)
-    rows = []
-    for name in sorted(mapping.keys(), key=lambda x: str(x).lower()):
-        ks = str(name)
-        lk = ks.lower().replace('-', '_')
-        redacted = (
-            lk
-            in {
-                'apikey',
-                'api_key',
-                'access_token',
-                'refresh_token',
-                'client_secret',
-                'password',
-                'secret',
-                'private_key',
-            }
-            or lk.endswith('_token')
-            or lk.endswith('_secret')
-            or lk.endswith('_password')
-            or ('api' in lk and lk.endswith('_key'))
-        )
-        rows.append((ks, '[redacted]' if redacted else mapping[name]))
-    return str(rows)
-
-
 def get_cache_key(url, params=None, headers=None, data=None):
-    """Generate a cache key for API requests (SHA3-256 over redacted metadata; not password storage)."""
-    key_parts = [url]
+    """Generate a cache key from redacted URL plus key names only (no secret values)."""
+    parts = [_redact_url_query_for_log(str(url or '').strip())]
     if params:
-        key_parts.append(_cache_key_secret_safe_repr(params))
+        parts.append(_mapping_key_names_fingerprint(params))
     if headers:
         filtered_headers = {
             k: v
             for k, v in headers.items()
             if str(k).lower() not in {'authorization', 'x-api-key', 'cookie'}
         }
-        key_parts.append(_cache_key_secret_safe_repr(filtered_headers))
+        parts.append(_mapping_key_names_fingerprint(filtered_headers))
     if data:
-        key_parts.append(_cache_key_secret_safe_repr(data) if isinstance(data, dict) else str(data))
-    return hashlib.sha3_256('|'.join(key_parts).encode('utf-8')).hexdigest()
+        parts.append(_mapping_key_names_fingerprint(data))
+    return hashlib.sha3_256('|'.join(parts).encode('utf-8')).hexdigest()
 
 def fetch_vespia_authentication():
     """Authenticate with Vespia API and get access token"""

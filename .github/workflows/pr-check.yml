@@ -59,23 +59,25 @@ jobs:
         run: |
           git fetch --no-tags origin "${BASE_REF}:refs/remotes/origin/${BASE_REF}"
           git diff --name-only "origin/${BASE_REF}..HEAD" > /tmp/changed-files.txt
+          git diff --name-only --diff-filter=AM "origin/${BASE_REF}..HEAD" > /tmp/changed-files-am.txt
           echo "Changed files:"
           sed -n '1,200p' /tmp/changed-files.txt
 
       - name: Scope guard (repository safety)
         run: |
-          if rg '(^|/)\.env($|\.|/)|\.(db|db-shm|db-wal|sqlite|sqlite3)$|(^|/)logs/|(^|/)data/' /tmp/changed-files.txt >/dev/null; then
-            echo "::error::PR contains forbidden runtime, secret, database, log, or data paths:"
-            rg '(^|/)\.env($|\.|/)|\.(db|db-shm|db-wal|sqlite|sqlite3)$|(^|/)logs/|(^|/)data/' /tmp/changed-files.txt || true
+          # Scope checks apply only to added/modified paths so deleting forbidden trees does not fail CI.
+          if rg --pcre2 '(^|/)\.env/|(^|/)\.env$|(^|/)\.env\.(?!example$|sample$)[^/]+$|\.(db|db-shm|db-wal|sqlite|sqlite3)$|(^|/)logs/|(^|/)data/' /tmp/changed-files-am.txt >/dev/null; then
+            echo "::error::PR adds or modifies forbidden runtime, secret, database, log, or data paths:"
+            rg --pcre2 '(^|/)\.env/|(^|/)\.env$|(^|/)\.env\.(?!example$|sample$)[^/]+$|\.(db|db-shm|db-wal|sqlite|sqlite3)$|(^|/)logs/|(^|/)data/' /tmp/changed-files-am.txt || true
             exit 1
           fi
-          if rg '^scripts/v2\.8/web_portal/' /tmp/changed-files.txt >/dev/null; then
+          if rg '^scripts/v2\.8/web_portal/' /tmp/changed-files-am.txt >/dev/null; then
             echo "::error::Website files under scripts/v2.8/web_portal are forbidden from push scope."
             exit 1
           fi
-          if rg '^scripts/v2\.0/(web_portal|deploy)/|^scripts/v2\.8/deploy/' /tmp/changed-files.txt >/dev/null; then
+          if rg '^scripts/v2\.0/(web_portal|deploy)/|^scripts/v2\.8/deploy/' /tmp/changed-files-am.txt >/dev/null; then
             echo "::error::Operational paths (scripts/v2.0/web_portal, scripts/v2.0/deploy, scripts/v2.8/deploy) must not be committed."
-            rg '^scripts/v2\.0/(web_portal|deploy)/|^scripts/v2\.8/deploy/' /tmp/changed-files.txt || true
+            rg '^scripts/v2\.0/(web_portal|deploy)/|^scripts/v2\.8/deploy/' /tmp/changed-files-am.txt || true
             exit 1
           fi
 
