@@ -95,6 +95,15 @@ def _safe_url_hostname(url: str) -> str:
         return ''
 
 
+def _safe_url_for_log(url: str) -> str:
+    """Return a URL safe for logs by removing query string and fragment entirely."""
+    try:
+        parsed = urlparse(str(url or '').strip())
+        return urlunparse(parsed._replace(query='', fragment=''))
+    except Exception:
+        return '[unparseable_url]'
+
+
 def _redact_url_query_for_log(url: str) -> str:
     """Redact all query parameter values before printing URLs to stdout/logs."""
     try:
@@ -4354,7 +4363,7 @@ def robust_request(method, url, **kwargs):
         except requests.exceptions.RequestException as e:
             if not quiet_http_errors:
                 print(f"❌ Request Error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}")
-                print(f"   URL: {_redact_url_query_for_log(url)}")
+                print(f"   URL: {_safe_url_for_log(url)}")
                 print(f"   Method: {method}")
                 print(f"   Headers: {_redact_headers_for_log(kwargs.get('headers', {}))}")
             
