@@ -17,12 +17,34 @@ HEALTH_URL_APP="${HEALTH_URL_APP:-http://127.0.0.1/healthz}"
 HEALTH_URL_SCRIPT="${HEALTH_URL_SCRIPT:-http://127.0.0.1:5001/webhook/health/deep/polygon}"
 WEB_SERVICE="${WEB_SERVICE:-hodler-web-portal.service}"
 SCRIPT_SERVICE="${SCRIPT_SERVICE:-defirisk-webhook.service}"
+HEALTH_CHECK_ATTEMPTS="${HEALTH_CHECK_ATTEMPTS:-12}"
+HEALTH_CHECK_DELAY_SECONDS="${HEALTH_CHECK_DELAY_SECONDS:-5}"
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="${BACKUP_ROOT}/${STAMP}"
 PREV_COMMIT_FILE="${SNAPSHOT_DIR}/previous_commit.txt"
 
 mkdir -p "${SNAPSHOT_DIR}"
+
+wait_for_health() {
+  local name="$1"
+  local url="$2"
+  local attempt
+
+  for attempt in $(seq 1 "${HEALTH_CHECK_ATTEMPTS}"); do
+    if curl -fsS --max-time 10 "${url}" >/dev/null 2>&1; then
+      echo "[deploy] ${name} health check passed on attempt ${attempt}/${HEALTH_CHECK_ATTEMPTS}"
+      return 0
+    fi
+    if [[ "${attempt}" -lt "${HEALTH_CHECK_ATTEMPTS}" ]]; then
+      echo "[deploy] ${name} health check not ready (attempt ${attempt}/${HEALTH_CHECK_ATTEMPTS}); retrying"
+      sleep "${HEALTH_CHECK_DELAY_SECONDS}"
+    fi
+  done
+
+  echo "[deploy] ${name} health check failed after ${HEALTH_CHECK_ATTEMPTS} attempts" >&2
+  return 1
+}
 
 mkdir -p "${APP_ROOT}"
 cd "${APP_ROOT}"
@@ -96,12 +118,11 @@ echo "[deploy] restarting services"
 sudo systemctl restart "${WEB_SERVICE}" || true
 sudo systemctl restart "${SCRIPT_SERVICE}" || true
 
-sleep 4
 echo "[deploy] health checks"
 set +e
-curl -fsS -m 10 "${HEALTH_URL_APP}" >/dev/null
+wait_for_health "app" "${HEALTH_URL_APP}"
 APP_OK=$?
-curl -fsS -m 10 "${HEALTH_URL_SCRIPT}" >/dev/null
+wait_for_health "script" "${HEALTH_URL_SCRIPT}"
 SCRIPT_OK=$?
 set -e
 
