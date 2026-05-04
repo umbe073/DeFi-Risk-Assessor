@@ -33,6 +33,7 @@ from ..security_url import (
 
 support_bp = Blueprint("support", __name__, url_prefix="/api/v1/support")
 TICKET_REF_PATTERN = re.compile(r"\bHD-\d{8}(?:-\d+){1,2}\b", flags=re.IGNORECASE)
+_HEADER_NAME_TOKEN_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 TICKET_SUBJECT_MAX_LENGTH = 24
 TICKET_BODY_MAX_LENGTH = 2000
 TICKET_EMAIL_MAX_LENGTH = 320
@@ -1975,8 +1976,10 @@ def create_ticket():
     )
     response = jsonify(result_payload)
     for header, value in extra_headers.items():
-        safe_key = sanitize_header_value(str(header), max_length=200)
-        response.headers[safe_key] = sanitize_header_value(str(value))
+        header_name = str(header or "").strip()
+        if not header_name or not _HEADER_NAME_TOKEN_PATTERN.fullmatch(header_name):
+            continue
+        response.headers[header_name] = sanitize_header_value(str(value))
     return response, status_code
 
 
