@@ -76,6 +76,8 @@ defi_dashboard_locks/
 # Existing tracked files are not removed by .gitignore; this guards future adds.
 /*
 !/.gitignore
+!/.gitleaks.toml
+!/README.md
 !/AGENTS.md
 !/CONTRIBUTING.md
 !/LICENSE
