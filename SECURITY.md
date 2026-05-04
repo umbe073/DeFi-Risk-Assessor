@@ -59,7 +59,7 @@ Out of scope:
 
 GitHub’s [Copilot Autofix for code scanning](https://docs.github.com/en/code-security/concepts/code-scanning/copilot-autofix-for-code-scanning) suggests patches for many CodeQL alerts. It does **not** replace review: suggestions can be wrong, incomplete, or unsafe. Follow GitHub’s [responsible use](https://docs.github.com/en/code-security/responsible-use/responsible-use-autofix-code-scanning) guidance—treat every suggestion like a junior PR, run CI/tests, and confirm the alert clears before merging.
 
-**Repository checklist (owners)**
+### Repository checklist (owners)
 
 1. **Code scanning** is on (this repo uses `.github/workflows/codeql.yml` plus `.github/codeql/codeql-config.yml`).
 2. **Copilot Autofix** for security results is allowed: **Settings → Code security and analysis → Code scanning → Copilot Autofix** (or **Settings → Advanced Security** on org-owned repos). If org/enterprise policy disabled it, re-enable there first.
@@ -67,7 +67,7 @@ GitHub’s [Copilot Autofix for code scanning](https://docs.github.com/en/code-s
 4. **Dependency Review** (`.github/workflows/dependency-review.yml`) flags known-vulnerable dependency changes on PRs; optionally tighten `fail-on-severity` once the backlog is under control.
 5. **OSV-Scanner** (`.github/workflows/osv-scanner.yml`) adds an additional vulnerability signal on `main` and PRs.
 
-**Operational loop (recommended)**
+### Operational loop (recommended)
 
 - Weekly (or after large merges): open **Security → Code scanning**, sort by severity, work down open alerts.
 - For each alert with a **suggested fix**: open a branch or “Apply suggestion”, adjust if needed, open a PR, wait for **CodeQL** + **PR Checks** + human review, then merge.
