@@ -1,0 +1,17 @@
+# Minimal runtime for Hodler Suite web portal (Gunicorn + Flask app under /opt/hodler-suite/web_portal).
+# Install inside the app venv only, e.g.:
+#   cd /opt/hodler-suite/web_portal && python3 -m venv venv && ./venv/bin/pip install -U pip wheel && ./venv/bin/pip install -r requirements-production.txt
+#
+# Pin ranges follow the product stack described in repository docs; loosen if your distro Python requires it.
+
+gunicorn>=22,<24
+Flask>=3.0.3,<3.2
+Werkzeug>=3.0.3,<4
+python-dotenv>=1.0.1,<2
+requests>=2.32.0,<3
+pydantic>=2.6,<3
+cryptography>=42,<47
+diskcache>=5.6,<6
+pandas>=2.1,<3
+numpy>=2.1,<3
+psutil>=5.9,<8
