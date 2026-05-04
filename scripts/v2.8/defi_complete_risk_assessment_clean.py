@@ -836,8 +836,21 @@ def normalize_chain_name(chain: str) -> str:
         'sol': 'solana',
         'solana': 'solana',
         'spl': 'solana',
+        'tron': 'tron',
+        'trx': 'tron',
+        'trc20': 'tron',
+        'trc-20': 'tron',
     }
     return aliases.get(value, value)
+
+
+from token_list_registry import (  # noqa: E402
+    SOLANA_WRAPPED_SOL_MINT,
+    native_like_address_keys_for_chain,
+    oneinch_dst_stable_for_chain,
+    stablecoin_address_keys,
+    wrapped_address_keys_for_chain,
+)
 
 
 def normalize_symbol_for_api(symbol: Any | None) -> str:
@@ -856,9 +869,6 @@ def normalize_symbol_for_api(symbol: Any | None) -> str:
     for old, new in replacements.items():
         value = value.replace(old, new)
     return re.sub(r'[^A-Z0-9._-]', '', value)
-
-
-SOLANA_WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112"
 
 
 def canonicalize_solana_token_address(address: str, symbol: Any | None = None) -> str:
@@ -8020,24 +8030,13 @@ class DeFiRiskAssessor:
             if chain_key == 'solana'
             else raw_address
         )
-        token_address_lower = str(token_address_norm or '').lower()
-
-        # Known stablecoin addresses across major supported chains.
-        stablecoin_addresses = {
-            "0xdac17f958d2ee523a2206206994597c13d831ec7",  # USDT (ETH)
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",  # USDC (ETH)
-            "0x6b175474e89094c44da98b954eedeac495271d0f",  # DAI (ETH)
-            "0x4fabb145d64652a948d72533023f6e7a623c7c53",  # BUSD (ETH)
-            "0x853d955acef822db058eb8505911ed77f175b99e",  # FRAX (ETH)
-            "0x5f98805a4e8be255a32880fdec7f6728c6568ba0",  # LUSD (ETH)
-            "0x0000000000085d4780b73119b644ae5ecd22b376",  # TUSD (ETH)
-            "0xc7346783f5e645aa998b106ef9e7f499528673d8",  # frxUSD (Linea)
-            "0xd3dce716f3ef535c5ff8d041c1a41c3bd89b97ae",  # sCUSD (Sonic)
-            "0x9151434b16b9763660705744891fa906f660ecc5",  # USD₮0 (Sei)
-            "0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42",  # EURC (Base)
-        }
-        if token_address_lower and token_address_lower in stablecoin_addresses:
-            return True
+        reg_stable = stablecoin_address_keys()
+        if reg_stable:
+            cmp_stable = str(token_address_norm or '').strip()
+            if cmp_stable.startswith('0x'):
+                cmp_stable = cmp_stable.lower()
+            if cmp_stable and cmp_stable in reg_stable:
+                return True
 
         stablecoin_symbols = {
             'USDT', 'USDC', 'DAI', 'BUSD', 'FRAX', 'LUSD', 'PAX', 'PAXG', 'TUSD',
@@ -8089,33 +8088,16 @@ class DeFiRiskAssessor:
         name_raw = str(token_name or getattr(self, 'current_token_name', '') or '').strip()
         name_norm = normalize_symbol_for_api(name_raw)
         token_value = str(token_address or '').strip()
-        token_lower = token_value.lower()
-        if chain_key == 'solana':
-            token_lower = canonicalize_solana_token_address(token_value, symbol_norm).lower()
-
-        wrapped_addresses_by_chain = {
-            'eth': {
-                '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',  # WETH
-                '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',  # WBTC
-                '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',  # wstETH
-            },
-            'bsc': {'0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'},  # WBNB
-            'polygon': {
-                '0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270',  # WMATIC
-                '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619',  # WETH
-                '0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6',  # WBTC
-            },
-            'op': {'0x4200000000000000000000000000000000000006'},  # WETH
-            'arbitrum': {
-                '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',  # WETH
-                '0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f',  # WBTC
-            },
-            'base': {'0x4200000000000000000000000000000000000006'},  # WETH
-            'avax': {'0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7'},  # WAVAX
-            'solana': {SOLANA_WRAPPED_SOL_MINT.lower()},
-        }
-        if token_lower and token_lower in wrapped_addresses_by_chain.get(chain_key, set()):
-            return True
+        reg_wrapped = wrapped_address_keys_for_chain(chain_key)
+        if reg_wrapped:
+            if chain_key == 'solana':
+                can_tok = canonicalize_solana_token_address(token_value, symbol_norm)
+                if can_tok and can_tok in reg_wrapped:
+                    return True
+            else:
+                token_cmp = token_value.lower() if token_value.startswith('0x') else token_value.strip()
+                if token_cmp and token_cmp in reg_wrapped:
+                    return True
 
         wrapped_symbols = {
             'WETH', 'WBTC', 'WBNB', 'WMATIC', 'WPOL', 'WAVAX', 'WSOL',
@@ -8137,9 +8119,6 @@ class DeFiRiskAssessor:
         symbol_norm = normalize_symbol_for_api(symbol)
         name_norm = normalize_symbol_for_api(token_name or getattr(self, 'current_token_name', ''))
         token_value = str(token_address or '').strip()
-        token_lower = token_value.lower()
-        if chain_key == 'solana':
-            token_lower = canonicalize_solana_token_address(token_value, symbol_norm).lower()
 
         evm_native_aliases = {
             '0x0000000000000000000000000000000000000000',
@@ -8161,22 +8140,16 @@ class DeFiRiskAssessor:
             'zksync': {'ZK', 'ETH', 'WETH'},
             'thorchain': {'RUNE', 'THOR', 'WRUNE'},
         }
-        wrapped_addresses = {
-            'eth': {'0xc02aaA39b223FE8D0A0E5C4F27eAD9083C756Cc2'.lower()},
-            'bsc': {'0xbb4cdB9CBd36B01bD1cBaEBF2De08d9173bc095c'.lower()},
-            'polygon': {'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270'.lower()},
-            'op': {
-                '0x4200000000000000000000000000000000000006'.lower(),
-                '0x4200000000000000000000000000000000000042'.lower(),
-            },
-            'arbitrum': {
-                '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'.lower(),
-                '0x912CE59144191C1204E64559FE8253a0e49E6548'.lower(),
-            },
-            'base': {'0x4200000000000000000000000000000000000006'.lower()},
-            'avax': {'0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7'.lower()},
-            'solana': {SOLANA_WRAPPED_SOL_MINT.lower()},
-        }
+        reg_native_like = native_like_address_keys_for_chain(chain_key)
+        if reg_native_like:
+            if chain_key == 'solana':
+                can_tok = canonicalize_solana_token_address(token_value, symbol_norm)
+                if can_tok and can_tok in reg_native_like:
+                    return True
+            else:
+                token_cmp = token_value.lower() if token_value.startswith('0x') else token_value.strip()
+                if token_cmp and token_cmp in reg_native_like:
+                    return True
         name_markers = {
             'eth': ('ETHEREUM', 'WRAPPEDETHER'),
             'bsc': ('BINANCECOIN', 'WRAPPEDBNB'),
@@ -8190,8 +8163,7 @@ class DeFiRiskAssessor:
         chain_symbols = native_symbols.get(chain_key, set())
         if symbol_norm and symbol_norm in chain_symbols:
             return True
-        if token_lower and token_lower in wrapped_addresses.get(chain_key, set()):
-            return True
+        token_lower = token_value.lower()
         if chain_key in {'eth', 'bsc', 'polygon', 'op', 'arbitrum', 'base', 'avax', 'linea', 'mantle', 'sei', 'sonic', 'zksync'}:
             if token_lower in evm_native_aliases and symbol_norm in chain_symbols:
                 return True
@@ -9495,16 +9467,7 @@ class DeFiRiskAssessor:
             if INCH_API_KEY and is_evm_chain(chain) and is_valid_evm_address(token_address):
                 try:
                     chain_id = chain_to_1inch_id(chain)
-                    oneinch_stables = {
-                        'eth': '0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',      # USDC
-                        'bsc': '0x55d398326f99059fF775485246999027B3197955',      # USDT
-                        'polygon': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',  # USDC.e
-                        'op': '0x0b2c639c533813f4aa9d7837caf62653d097ff85',       # USDC
-                        'arbitrum': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',  # USDC
-                        'base': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',      # USDC
-                        'mantle': '0x09Bc4E0D864854c6aFb6eB9A9CdF58Ac190D0dF9',     # USDC
-                    }
-                    stable_ref = oneinch_stables.get(normalize_chain_name(chain))
+                    stable_ref = oneinch_dst_stable_for_chain(normalize_chain_name(chain))
                     if chain_id and stable_ref:
                         headers = {'Authorization': f'Bearer {INCH_API_KEY}'}
                         params = {
@@ -18982,12 +18945,6 @@ def fetch_1inch_quote(from_token_address, to_token_address, amount, chain_id=1):
         return None
     
     try:
-        # Use the actual token address from the assessment, not a placeholder
-        # The to_token_address should be the actual token being assessed
-        if to_token_address == "0xA0b86a33E6441b8C4C8C0C4C0C4C0C4C0C4C0C4C":
-            # If we get a placeholder, use the source token as destination (self-swap for liquidity check)
-            to_token_address = from_token_address
-        
         headers = {"Authorization": f"Bearer {INCH_API_KEY}"}
         params = {
             "src": from_token_address,

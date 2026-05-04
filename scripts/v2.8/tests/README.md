@@ -37,8 +37,8 @@ This directory contains all test files for the DeFi Risk Assessment Suite, organ
 To run all tests:
 
 ```bash
-cd /Users/amlfreak/Desktop/venv/scripts/v2.0
-python -m pytest tests/
+cd /path/to/DeFi-Risk-Assessor/scripts/v2.8
+python3 -m pytest tests/
 ```
 
 To run specific test categories:

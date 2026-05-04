@@ -32,6 +32,19 @@ TOKENS_CSV = DATA_DIR / 'tokens.csv'
 sys.path.append(str(PROJECT_ROOT))
 sys.path.append(str(Path(__file__).parent))
 
+
+def normalize_token_storage_address(addr):
+    """Lowercase EVM 0x+40 hex only; preserve Tron/Solana/THORChain and other opaque strings."""
+    s = str(addr or "").strip()
+    if not s:
+        return ""
+    if s.startswith("0x") and len(s) == 42:
+        body = s[2:]
+        if all(c in "0123456789abcdefABCDEF" for c in body):
+            return s.lower()
+    return s
+
+
 class TokenManager:
     """
     Centralized Token Manager
@@ -72,8 +85,8 @@ class TokenManager:
             # Clean up the dataframe (remove empty rows)
             self.tokens_df = self.tokens_df.dropna(subset=['address', 'symbol'])
             
-            # Normalize addresses to lowercase for consistency
-            self.tokens_df['address'] = self.tokens_df['address'].str.lower()
+            # Normalize EVM addresses only (multi-chain CSV may include non-EVM strings).
+            self.tokens_df['address'] = self.tokens_df['address'].apply(normalize_token_storage_address)
             
             print(f"✅ Loaded {len(self.tokens_df)} tokens from tokens.csv")
             
@@ -107,7 +120,7 @@ class TokenManager:
         tokens = []
         for _, row in self.tokens_df.iterrows():
             tokens.append({
-                'address': row['address'].lower(),
+                'address': row['address'],
                 'name': row['name'],
                 'symbol': row['symbol'],
                 'chain': row['chain']
@@ -136,7 +149,7 @@ class TokenManager:
         
         row = result.iloc[0]
         return {
-            'address': row['address'].lower(),
+            'address': row['address'],
             'name': row['name'],
             'symbol': row['symbol'],
             'chain': row['chain']
@@ -155,16 +168,15 @@ class TokenManager:
         if self.tokens_df is None or self.tokens_df.empty:
             return None
         
-        # Normalize address to lowercase
-        address_lower = address.lower()
-        result = self.tokens_df[self.tokens_df['address'] == address_lower]
+        lookup_key = normalize_token_storage_address(address)
+        result = self.tokens_df[self.tokens_df['address'] == lookup_key]
         
         if result.empty:
             return None
         
         row = result.iloc[0]
         return {
-            'address': row['address'].lower(),
+            'address': row['address'],
             'name': row['name'],
             'symbol': row['symbol'],
             'chain': row['chain']

@@ -11,7 +11,7 @@ The current model is:
 - Develop app/risk/script changes locally under `scripts/v2.8`.
 - Commit and push those changes to GitHub.
 - GitHub Actions runs the production deploy workflow.
-- The server deploy script syncs `scripts/v2.8` into the configured runtime target, usually `.../scripts/v2.0`.
+- The server deploy script syncs `scripts/v2.8` into the configured runtime target (often a server-side `scripts` tree kept for backward-compatible service paths).
 - The `web_portal` / website tree remains a manual deployment path and is intentionally not published from this folder.
 
 ## What Changed From v2.0
@@ -50,10 +50,10 @@ On a push to `main`, GitHub Actions:
 Important deploy paths:
 
 - `DEPLOY_PATH`: Git checkout root on the server, for example `/opt/defi-risk/app`.
-- `DEPLOY_RUNTIME_TARGET_DIR`: runtime target, for example `/opt/defi-risk/app/scripts/v2.0`.
+- `DEPLOY_RUNTIME_TARGET_DIR`: runtime target, for example `/opt/defi-risk/app/scripts/v2.8`.
 - `SOURCE_DIR`: defaults to `${DEPLOY_PATH}/scripts/v2.8`.
 
-Do not set `DEPLOY_RUNTIME_TARGET_DIR` to `DEPLOY_PATH` itself. The runtime target must be the `scripts/v2.0` runtime tree, not the repository root.
+Do not set `DEPLOY_RUNTIME_TARGET_DIR` to `DEPLOY_PATH` itself. The runtime target must be the app `scripts` subtree used by services, not the repository root.
 
 See:
 
