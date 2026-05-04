@@ -85,6 +85,9 @@ defi_dashboard_locks/
 !/SECURITY.md
 !/.github/
 !/.github/**
+!/docs/
+!/docs/security/
+!/docs/security/**
 !/scripts/
 !/scripts/v2.8/
 !/scripts/v2.8/**

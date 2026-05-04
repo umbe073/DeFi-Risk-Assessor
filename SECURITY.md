@@ -81,6 +81,15 @@ There is **no supported “auto-merge all CodeQL fixes”** mode for this privat
 SaaS codebase: automation should stop at opening vetted PRs, not at bypassing
 review.
 
+### CodeQL deep-audit cadence (2026)
+
+- **May 2026** — full triage and fixes for 140 open alerts, snapshot
+  `docs/security/codeql_alerts_2026-05.json`, tracking issue
+  [#69](https://github.com/ddos-revenge/DeFi-Risk-Assessor/issues/69).
+- After each large security batch: re-run **Actions → CodeQL Advanced** on the
+  PR branch, compare against the prior snapshot, and document any intentionally
+  remaining findings in the tracking issue (no silent mass-dismiss).
+
 ## Operator Notes
 
 - Never commit `.env`, private keys, SQLite databases, logs, or raw runtime caches.

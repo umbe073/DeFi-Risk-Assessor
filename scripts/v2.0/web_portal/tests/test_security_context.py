@@ -107,3 +107,10 @@ def test_lookup_url_target_rejects_private_ip_literals() -> None:
     assert sc._is_safe_lookup_url_target("http://127.0.0.1/intel") is False
     assert sc._is_safe_lookup_url_target("http://[::1]/intel") is False
     assert sc._is_safe_lookup_url_target("http://169.254.169.254/latest/meta-data") is False
+
+
+def test_redact_sensitive_log_text_masks_bearer_and_headers() -> None:
+    raw = "Authorization: Bearer sekret-token\nOther: ok"
+    red = sc.redact_sensitive_log_text(raw)
+    assert "sekret-token" not in red
+    assert "Bearer [redacted]" in red or "[redacted]" in red

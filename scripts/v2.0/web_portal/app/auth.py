@@ -5,9 +5,11 @@ from __future__ import annotations
 from functools import wraps
 import secrets
 from typing import Any, Callable, Dict, Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode
 
 from flask import current_app, g, jsonify, redirect, request, session, url_for
+
+from .security_url import is_https_url_host_allowed, merge_allowed_hosts_from_settings, safe_relative_path
 
 
 def _store():
@@ -93,14 +95,15 @@ def validate_csrf_token(submitted: Optional[str]) -> bool:
 def _safe_next_url(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
-    parsed = urlparse(value)
-    if parsed.scheme or parsed.netloc:
-        return None
-    if not value.startswith("/"):
-        return None
-    if value.startswith("//"):
-        return None
-    return value
+    settings = current_app.config.get("SETTINGS")
+    hosts = merge_allowed_hosts_from_settings(settings) if settings else set()
+    raw = str(value or "").strip()
+    rel = safe_relative_path(raw)
+    if rel is not None:
+        return rel
+    if is_https_url_host_allowed(raw, hosts):
+        return raw
+    return None
 
 
 def redirect_to_login() -> Any:

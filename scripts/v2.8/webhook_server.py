@@ -15,6 +15,7 @@ import hmac
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
+import uuid
 
 # Align chain normalization / deep-health allow-list with `web_portal/app/hodler_chain_codes.py`
 _WEB_PORTAL_ROOT = Path(__file__).resolve().parent / "web_portal"
@@ -3654,7 +3655,8 @@ def _build_chain_deep_health_snapshot(chain_hint: str) -> tuple[dict[str, Any], 
     if chain_code not in supported_chains:
         return ({
             'status': 'error',
-            'message': f'unsupported_chain:{chain_hint}',
+            'message': 'unsupported_chain',
+            'chain_hint': ''.join(ch for ch in str(chain_hint or '') if ch.isalnum() or ch in {'_', '-'})[:32],
             'supported_chains': sorted(supported_chains),
             'timestamp': datetime.now().isoformat(),
         }, 404)
@@ -3901,7 +3903,8 @@ def get_cache():
         }
         return jsonify(cache_data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.exception('dashboard_cache_status_failed: %s', e)
+        return jsonify({'error': 'internal_error', 'correlation_id': str(uuid.uuid4())}), 500
 
 @app.route('/webhook/health', methods=['GET'])
 def health_check():

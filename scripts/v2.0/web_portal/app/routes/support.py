@@ -23,6 +23,12 @@ from flask import Blueprint, current_app, jsonify, request
 from werkzeug.datastructures import FileStorage
 
 from ..auth import get_current_user
+from ..security_url import (
+    assert_github_api_url,
+    assert_resend_https_url,
+    assert_slack_incoming_webhook_url,
+    sanitize_header_value,
+)
 
 
 support_bp = Blueprint("support", __name__, url_prefix="/api/v1/support")
@@ -174,7 +180,8 @@ def _run_optional_clamav_scan(*, file_path: str, timeout_seconds: int = 20) -> D
             check=False,
         )
     except Exception as exc:
-        return {"engine": "clamav", "status": "error", "detail": str(exc)}
+        current_app.logger.exception("clamav_scan_failed: %s", exc)
+        return {"engine": "clamav", "status": "error", "detail": "clamav_scan_failed"}
     detail = " ".join(str(proc.stdout or "").split())
     if proc.returncode == 0:
         return {"engine": "clamav", "status": "clean", "detail": detail}
@@ -258,12 +265,13 @@ def _scan_and_stage_attachment(
                 hasher.update(data)
                 out.write(data)
     except Exception as exc:
+        current_app.logger.exception("attachment_read_failed: %s", exc)
         return fail(
             {
                 "error": "attachment_read_failed",
                 "message": "Unable to read attachment payload",
                 "filename": original_filename,
-                "detail": str(exc),
+                "detail": "attachment_read_failed",
             },
             400,
         )
@@ -471,7 +479,7 @@ def _notify_support_slack(
                 severity="warning",
                 message="Slack notification failed due to internal exception",
                 event_key=f"slack_notify_exception:{event}:{ticket.get('ticket_ref', '')}",
-                context={"event": event, "ticket_ref": ticket.get("ticket_ref"), "error": str(exc)},
+                context={"event": event, "ticket_ref": ticket.get("ticket_ref"), "error": type(exc).__name__},
             )
             return
 
@@ -507,7 +515,7 @@ def _notify_support_slack(
                 severity="warning",
                 message="Bug report Cursor relay failed due to internal exception",
                 event_key=f"bug_cursor_exception:{ticket.get('ticket_ref', '')}",
-                context={"ticket_ref": ticket.get("ticket_ref"), "error": str(exc)},
+                context={"ticket_ref": ticket.get("ticket_ref"), "error": type(exc).__name__},
             )
             return
         if str(cursor_result.get("error", "")).strip().lower() == "bug_report_blocked_untrusted_payload":
@@ -571,6 +579,11 @@ def _post_slack_webhook(*, webhook_url: str, timeout_seconds: int, payload: Dict
     target = str(webhook_url or "").strip()
     if not target:
         return {"sent": False, "error": "slack_webhook_missing"}
+    try:
+        assert_slack_incoming_webhook_url(target)
+    except ValueError as exc:
+        current_app.logger.warning("slack_webhook_rejected: %s", exc)
+        return {"sent": False, "error": "slack_webhook_invalid"}
 
     req = urlrequest.Request(
         target,
@@ -599,7 +612,8 @@ def _post_slack_webhook(*, webhook_url: str, timeout_seconds: int, payload: Dict
             "detail": _short_text(detail, limit=320),
         }
     except Exception as exc:  # pragma: no cover - network dependency
-        return {"sent": False, "error": str(exc)}
+        current_app.logger.exception("slack_webhook_post_failed: %s", exc)
+        return {"sent": False, "error": "slack_webhook_post_failed"}
 
 
 def _simple_triage(subject: str, message: str):
@@ -662,8 +676,12 @@ def _extract_sender_email(payload: Dict[str, Any]) -> str:
 def _strip_html(html_text: str) -> str:
     if not html_text:
         return ""
-    no_script = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", " ", html_text)
-    no_tags = re.sub(r"(?is)<[^>]+>", " ", no_script)
+    raw = str(html_text)
+    if len(raw) > 256 * 1024:
+        raw = raw[: 256 * 1024]
+    no_script = re.sub(r"(?is)<script[^>]*>.*?</script>", " ", raw)
+    no_script = re.sub(r"(?is)<style[^>]*>.*?</style>", " ", no_script)
+    no_tags = re.sub(r"(?is)<[^>]{0,2000}>", " ", no_script)
     collapsed = re.sub(r"[ \t]+", " ", no_tags)
     return collapsed.strip()
 
@@ -702,7 +720,14 @@ def _trim_quoted_content(message: str) -> str:
 def _extract_first_email(text: str) -> str:
     if not text:
         return ""
-    match = re.search(r"([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})", str(text), flags=re.IGNORECASE)
+    raw = str(text)
+    if len(raw) > 32768:
+        raw = raw[:32768]
+    match = re.search(
+        r"\b[A-Z0-9._%+-]{1,320}@[A-Z0-9.-]{1,255}\.[A-Z]{2,63}\b",
+        raw,
+        flags=re.IGNORECASE,
+    )
     if not match:
         return ""
     return _normalize_email(match.group(1))
@@ -711,14 +736,18 @@ def _extract_first_email(text: str) -> str:
 def _extract_forwarded_sender(raw_message: str, *, subject: str = "") -> str:
     if not raw_message:
         return ""
+    subj = str(subject or "")[:4096]
+    body = str(raw_message)
+    if len(body) > 65536:
+        body = body[:65536]
     forwarded_hints = ("fwd:", "fw:", "forwarded message", "ha scritto:", "\nfrom:")
-    lowered = f"{subject}\n{raw_message}".lower()
+    lowered = f"{subj}\n{body}".lower()
     if not any(hint in lowered for hint in forwarded_hints):
         return ""
 
     from_line = re.search(
-        r"(?im)^\s*from:\s*(?:.*?<)?([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})",
-        str(raw_message),
+        r"(?im)^\s*from:\s*(?:[^<\r\n]{0,256}<)?([A-Z0-9._%+-]{1,320}@[A-Z0-9.-]{1,255}\.[A-Z]{2,63})",
+        body,
     )
     if from_line:
         return _normalize_email(from_line.group(1))
@@ -1028,6 +1057,11 @@ def _fetch_resend_received_email(*, email_id: str, api_key: str, timeout_seconds
     attempts = []
 
     for endpoint in endpoints:
+        try:
+            assert_resend_https_url(endpoint)
+        except ValueError:
+            attempts.append("resend_endpoint_blocked")
+            continue
         for auth_headers in auth_header_variants:
             req = urlrequest.Request(endpoint, method="GET", headers={**base_headers, **auth_headers})
             raw_body = ""
@@ -1083,6 +1117,10 @@ def _list_resend_received_emails(*, api_key: str, timeout_seconds: int, limit: i
 
     timeout = max(3, int(timeout_seconds))
     attempts = []
+    try:
+        assert_resend_https_url(endpoint)
+    except ValueError:
+        return [], "resend_endpoint_blocked"
     for auth_headers in auth_header_variants:
         req = urlrequest.Request(endpoint, method="GET", headers={**base_headers, **auth_headers})
         raw_body = ""
@@ -1297,6 +1335,10 @@ def _github_api_request(
     timeout_seconds: int = 10,
 ) -> Dict[str, Any]:
     target = f"https://api.github.com{path}"
+    try:
+        assert_github_api_url(target)
+    except ValueError:
+        return {"ok": False, "error": "github_api_url_invalid"}
     headers = {
         "Authorization": f"Bearer {github_token}",
         "Accept": "application/vnd.github+json",
@@ -1814,7 +1856,7 @@ def submit_ticket_payload(
                 event_key=f"ticket_attachment_persist_failed:{ticket.get('ticket_ref', '')}",
                 context={
                     "ticket_ref": ticket.get("ticket_ref", ""),
-                    "error": str(exc),
+                    "error": type(exc).__name__,
                     "attachment_count": len(staged_attachments),
                 },
             )
@@ -1933,7 +1975,8 @@ def create_ticket():
     )
     response = jsonify(result_payload)
     for header, value in extra_headers.items():
-        response.headers[header] = value
+        safe_key = sanitize_header_value(str(header), max_length=200)
+        response.headers[safe_key] = sanitize_header_value(str(value))
     return response, status_code
 
 

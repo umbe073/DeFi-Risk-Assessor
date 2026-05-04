@@ -14,6 +14,7 @@ import hashlib
 import hmac
 from datetime import datetime
 from typing import Any, Callable, Optional
+import uuid
 
 # CRITICAL: Set unified app icon environment variables BEFORE any other imports
 if sys.platform == "darwin":
@@ -3608,7 +3609,8 @@ def _build_chain_deep_health_snapshot(chain_hint: str) -> tuple[dict[str, Any], 
     if chain_code not in supported_chains:
         return ({
             'status': 'error',
-            'message': f'unsupported_chain:{chain_hint}',
+            'message': 'unsupported_chain',
+            'chain_hint': ''.join(ch for ch in str(chain_hint or '') if ch.isalnum() or ch in {'_', '-'})[:32],
             'supported_chains': sorted(supported_chains),
             'timestamp': datetime.now().isoformat(),
         }, 404)
@@ -3855,7 +3857,8 @@ def get_cache():
         }
         return jsonify(cache_data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.exception('dashboard_cache_status_failed: %s', e)
+        return jsonify({'error': 'internal_error', 'correlation_id': str(uuid.uuid4())}), 500
 
 @app.route('/webhook/health', methods=['GET'])
 def health_check():

@@ -322,8 +322,9 @@ def create_enterprise_code():
             note=note,
             price_currency="EUR",
         )
-    except Exception as exc:
-        return jsonify({"error": "create_code_failed", "message": str(exc)}), 400
+    except Exception:
+        current_app.logger.exception("enterprise_code_create_failed")
+        return jsonify({"error": "create_code_failed", "message": "unable_to_create_code"}), 400
 
     return jsonify({"status": "created", "enterprise_code": code_data}), 201
 

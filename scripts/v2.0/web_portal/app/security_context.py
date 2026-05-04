@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import ipaddress
 import json
+import os
 import re
 import socket
 import time
+import uuid
 from threading import Lock
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
@@ -255,8 +258,10 @@ def _open_lookup_request(req: urlrequest.Request, *, timeout_seconds: int) -> An
 
 
 def _ip_intel_cache_key(*, ip_address: str, lookup_url: str, api_key: str) -> str:
-    token = f"{ip_address}|{lookup_url}|{api_key}"
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    """HMAC-SHA256 cache key (avoids treating sensitive material as a 'password hash')."""
+    material = f"{ip_address}|{lookup_url}|{api_key}".encode("utf-8")
+    pepper = (os.environ.get("SECRET_KEY") or os.environ.get("IP_INTEL_CACHE_PEPPER") or "dev-ip-intel-cache").encode("utf-8")
+    return hmac.new(pepper, material, hashlib.sha256).hexdigest()
 
 
 def _ip_intel_cache_get(cache_key: str) -> Optional[Dict[str, Any]]:
@@ -531,3 +536,38 @@ def lookup_ip_intel(
     }
     _ip_intel_cache_put(cache_key=cache_key, payload=result, ttl_seconds=cache_ttl_seconds)
     return result
+
+
+_HEADER_SECRET_RE = re.compile(
+    r"(?i)\b(authorization|cookie|set-cookie|x-api-key|x-forwarded-authorization)\s*[:=]\s*([^\s\[\]\(\)\{\}\"';]+)"
+)
+
+
+def redact_sensitive_log_text(text: str, *, max_length: int = 8000) -> str:
+    """Redact likely secrets before emitting logs or diagnostics."""
+
+    raw = str(text or "")
+    if len(raw) > max_length:
+        raw = raw[:max_length] + "…"
+    redacted = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [redacted]", raw)
+    redacted = _HEADER_SECRET_RE.sub(lambda m: f"{m.group(1)}=[redacted]", redacted)
+    return redacted
+
+
+def public_error_response(
+    logger: Any,
+    *,
+    exc: BaseException | None = None,
+    code: str = "internal_error",
+    status: int = 500,
+) -> Tuple[Any, int]:
+    """JSON error without leaking exception strings; includes correlation id."""
+
+    from flask import jsonify
+
+    correlation_id = str(uuid.uuid4())
+    if exc is not None:
+        logger.exception("request_failed correlation_id=%s code=%s", correlation_id, code)
+    else:
+        logger.error("request_failed correlation_id=%s code=%s", correlation_id, code)
+    return jsonify({"error": code, "correlation_id": correlation_id}), int(status)

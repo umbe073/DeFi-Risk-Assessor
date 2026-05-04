@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create PR if missing
-        uses: actions/github-script@v9
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         env:
           CURSOR_PR_TOKEN_SET: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' }}
         with:

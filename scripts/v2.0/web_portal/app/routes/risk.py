@@ -1293,11 +1293,11 @@ def _run_real_engine(
                     progress=100,
                     summary_message="Batch worker launch failed",
                     error_code="worker_batch_spec_error",
-                    error_message=str(exc)[:500],
+                    error_message="batch_spec_write_failed",
                     event_type="worker_failed",
                     details={"worker_id": worker_id},
                 )
-            return {"job": store.get_job(job_id), "result": None, "error": str(exc)}
+            return {"job": store.get_job(job_id), "result": None, "error": "batch_spec_write_failed"}
 
     if env_file:
         cmd.extend(["--env-file", env_file])
@@ -1342,7 +1342,7 @@ def _run_real_engine(
             env=child_env,
             start_new_session=True,
         )
-    except Exception as exc:
+    except Exception:
         fail_ids = [job_id]
         if batch_jobs:
             fail_ids = [str(r.get("job_id", "")).strip() for r in batch_jobs if r.get("job_id")]
@@ -1355,11 +1355,11 @@ def _run_real_engine(
                     progress=100,
                     summary_message="Engine launch failed",
                     error_code="worker_launch_error",
-                    error_message=str(exc)[:500],
+                    error_message="worker_launch_failed",
                     event_type="worker_failed",
                     details={"worker_id": worker_id},
                 )
-        return {"job": store.get_job(job_id), "result": None, "error": str(exc)}
+        return {"job": store.get_job(job_id), "result": None, "error": "worker_launch_failed"}
 
     return {
         "job": store.get_job(job_id),
@@ -2682,7 +2682,7 @@ def run_risk_worker_once():
     job_id = str(claimed.get("job_id", "")).strip()
     try:
         run_result = _run_claimed_job(store, claimed, worker_id=worker_id)
-    except Exception as exc:
+    except Exception:
         updated = store.update_job_state(
             job_id=job_id,
             status="failed",
@@ -2690,7 +2690,7 @@ def run_risk_worker_once():
             progress=100,
             summary_message="Assessment worker failed.",
             error_code="worker_runtime_error",
-            error_message=str(exc),
+            error_message="worker_runtime_error",
             event_type="worker_failed",
             details={"worker_id": worker_id},
         )

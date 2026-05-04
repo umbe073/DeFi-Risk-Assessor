@@ -21,6 +21,7 @@ from .routes.risk import risk_bp
 from .routes.support import support_bp
 from .risk_job_store import RiskJobStore
 from .security import apply_security_headers
+from .security_url import join_trusted_base_url
 from .special_accounts import SPECIAL_ENTERPRISE_EMAILS
 from .status_store import StatusStore
 from .slack_notifier import SupportSlackNotifier
@@ -163,9 +164,9 @@ def create_app() -> Flask:
         suffix = f"{path}?{query}" if query else path
         user = get_current_user()
         if user and request_host == marketing_host:
-            return redirect(f"{app_base_url}{suffix}")
+            return redirect(join_trusted_base_url(app_base_url, suffix))
         if not user and request_host == app_host:
-            return redirect(f"{marketing_base_url}{suffix}")
+            return redirect(join_trusted_base_url(marketing_base_url, suffix))
         return None
 
     @app.before_request

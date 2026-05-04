@@ -53,7 +53,7 @@ exec {command} {" ".join(args)}
     with open(wrapper_path, 'w') as f:
         f.write(wrapper_script)
     
-    os.chmod(wrapper_path, 0o755)
+    os.chmod(wrapper_path, 0o700)
     
     try:
         # Launch using the wrapper

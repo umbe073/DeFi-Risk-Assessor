@@ -28,6 +28,7 @@ from ..billing_store import (
 from ..payments.nowpayments import NowPaymentsAdapter, normalize_pay_currency
 from ..plans import get_checkout_plans
 from ..security_context import parse_user_agent
+from ..security_url import is_https_url_host_allowed, merge_allowed_hosts_from_settings, safe_relative_path
 from .support import _extract_client_ip, submit_ticket_payload
 from ..turnstile import verify_turnstile_token
 
@@ -257,11 +258,14 @@ def _user_operation_type_tag(operation_type: str) -> dict[str, str]:
 
 
 def _safe_local_next(value: str, fallback_endpoint: str = "pages.homepage") -> str:
-    candidate = str(value or "").strip()
-    if candidate:
-        parsed = urlparse(candidate)
-        if not parsed.scheme and not parsed.netloc and candidate.startswith("/") and not candidate.startswith("//"):
-            return candidate
+    settings = current_app.config["SETTINGS"]
+    hosts = merge_allowed_hosts_from_settings(settings)
+    raw = str(value or "").strip()
+    rel = safe_relative_path(raw)
+    if rel is not None:
+        return rel
+    if is_https_url_host_allowed(raw, hosts):
+        return raw
     return url_for(fallback_endpoint)
 
 
@@ -687,7 +691,7 @@ def _http_get_health(
                 except Exception:
                     pass
             return "degraded", detail, None
-        return "offline", f"Unavailable: {str(exc)[:90]}", None
+        return "offline", "Unavailable", None
 
 
 def _parse_health_detail_payload(payload_bytes: bytes, *, fallback: str = "") -> str:
@@ -846,7 +850,7 @@ def _json_post_health(
     except Exception as exc:  # pragma: no cover - network dependency
         if isinstance(exc, urlerror.HTTPError):
             return "degraded", f"HTTP {int(exc.code)}", None
-        return "offline", f"Unavailable: {str(exc)[:90]}", None
+        return "offline", "Unavailable", None
 
 
 def _hostname_from_url(url: str) -> str:
@@ -881,8 +885,8 @@ def _tls_days_remaining(hostname: str, *, timeout_seconds: int = 4) -> tuple[str
         if remaining_days <= 21:
             return "degraded", f"Certificate expires in {remaining_days}d ({host})", elapsed
         return "online", f"Certificate expires in {remaining_days}d ({host})", elapsed
-    except Exception as exc:  # pragma: no cover - network dependency
-        return "offline", f"TLS probe failed for {host}: {str(exc)[:90]}", None
+    except Exception:  # pragma: no cover - network dependency
+        return "offline", f"TLS probe failed for {host}", None
 
 
 def _storage_health_detail(settings) -> tuple[str, str, int | None]:
@@ -904,8 +908,8 @@ def _storage_health_detail(settings) -> tuple[str, str, int | None]:
     started = time.perf_counter()
     try:
         usage = shutil.disk_usage(directory)
-    except Exception as exc:
-        return "offline", f"Disk usage probe failed: {str(exc)[:90]}", None
+    except Exception:
+        return "offline", "Disk usage probe failed", None
     elapsed = int((time.perf_counter() - started) * 1000)
     total = max(1, int(usage.total))
     free = max(0, int(usage.free))

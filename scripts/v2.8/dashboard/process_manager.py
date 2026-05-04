@@ -1608,7 +1608,7 @@ if __name__ == "__main__":
             f.write(about_script)
         
         # Make executable
-        os.chmod(about_path, 0o755)
+        os.chmod(about_path, 0o640)
         print(f"✅ Created about script: {about_path}")
 
 # Global process manager instance
