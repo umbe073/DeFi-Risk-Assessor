@@ -1,23 +1,41 @@
-# Config for actions/labeler@v4 (minimatch globs).
+# Config for actions/labeler@v6 (changed-files schema).
 # Repo: https://github.com/actions/labeler — filename must be exactly `.github/labeler.yml`
 #
 # Create matching labels in GitHub (Settings → Labels), or grant `issues: write` on the
 # labeler job so new labels can be auto-created.
 
 documentation:
-  - docs/**
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - "**/*.md"
 
 ci:
-  # v4 defaults `dot: false`; this form still matches `.github/...` paths.
-  - "**/.github/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
 
 dependencies:
-  - requirements.txt
+  - changed-files:
+      - any-glob-to-any-file:
+          - requirements.txt
+          - scripts/**/requirements.txt
+
+"github-actions":
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/workflows/**
+          - .github/actions/**
 
 "web portal":
-  - scripts/v2.0/web_portal/**
+  - changed-files:
+      - any-glob-to-any-file:
+          - scripts/v2.0/web_portal/**
 
 "risk engine":
-  - scripts/v2.0/defi_complete_risk_assessment_clean.py
-  - scripts/v2.0/api_error_handler.py
-  - scripts/v2.0/dashboard/**
+  - changed-files:
+      - any-glob-to-any-file:
+          - scripts/v2.0/defi_complete_risk_assessment_clean.py
+          - scripts/v2.0/api_error_handler.py
+          - scripts/v2.0/dashboard/**
+          - scripts/v2.8/**
