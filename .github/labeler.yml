@@ -27,11 +27,6 @@ dependencies:
           - .github/workflows/**
           - .github/actions/**
 
-"web portal":
-  - changed-files:
-      - any-glob-to-any-file:
-          - scripts/v2.0/web_portal/**
-
 "risk engine":
   - changed-files:
       - any-glob-to-any-file:

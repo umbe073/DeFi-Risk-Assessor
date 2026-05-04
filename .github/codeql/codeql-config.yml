@@ -3,7 +3,7 @@ name: "CodeQL Config"
 # CodeQL scope for Hodler Suite.
 #
 # Only two trees are deployed in production:
-#   - scripts/v2.0/web_portal  (Flask web portal, manual deploy)
+#   - scripts/v2.0/web_portal  (excluded from repo — private Flask portal)
 #   - scripts/v2.8             (current engine, systemd service)
 #
 # We use `paths-ignore` only (CodeQL Python autobuild is unhappy with explicit

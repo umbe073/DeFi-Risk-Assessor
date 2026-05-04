@@ -20,9 +20,9 @@ See `LICENSE` for ownership and use restrictions.
 
 ## Project layout
 
-- `scripts/v2.8/` is the GitHub source-of-truth for app/risk code and GitOps deploy assets.
+- `scripts/v2.8/` is the GitHub source-of-truth for app/risk code.
 - `scripts/v2.8/data/` may contain reviewed v2.8 placeholder or report data; runtime databases and caches stay ignored.
-- `scripts/v2.0/web_portal/` is the manually deployed website/web portal path.
+- The web portal tree, `scripts/v2.0/deploy`, and `scripts/v2.8/deploy` are **not** committed — keep them local or on private ops storage only.
 - `.github/workflows/` contains CI, deploy, security scanning, and automation workflows.
 
 ## Development rules
@@ -42,13 +42,7 @@ From the repository root:
 git status
 ```
 
-For web portal work (from repo root, adjust paths if your clone differs):
-
-```bash
-cd scripts/v2.0/web_portal
-python3 -m pytest tests/
-python3 -m flake8 app tests tools --max-line-length=120 --extend-ignore=E501,W503,E203
-```
+For web portal work, use your **private** checkout of the portal (not in this repository), then run the project’s `pytest` and `flake8` there per internal runbooks.
 
 For targeted changes, run the narrowest relevant tests first, then expand if the change touches shared behavior.
 
@@ -78,6 +72,6 @@ Before opening a pull request:
 
 ## Deployment notes
 
-App/risk changes under `scripts/v2.8/` are deployed by GitHub Actions to the configured server runtime target.
+App/risk changes under `scripts/v2.8/` are deployed by GitHub Actions using the **server-side** deploy driver maintained in private ops (not from this repository).
 
-Website/web portal changes under `scripts/v2.0/web_portal/` are deployed manually (see internal runbooks for host and health checks).
+Website/web portal and infra playbooks are deployed manually from private checkouts or server-side copies per internal runbooks.
