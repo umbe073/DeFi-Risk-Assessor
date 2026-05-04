@@ -6,6 +6,14 @@ name: Cursor Agent Review Trigger
 # We post it once when a PR opens / reopens / leaves draft, and once per push
 # if Bugbot has not posted a status yet for the new HEAD commit.
 #
+# IMPORTANT: Comments created with the default GITHUB_TOKEN appear as
+# github-actions[bot]. Cursor/Bugbot (and many GitHub Apps) often ignore
+# bot-authored comments to prevent feedback loops, so the trigger line may
+# never start a review. Set repository secret CURSOR_PR_AUTOMATION_TOKEN to a
+# fine-scoped PAT (repo + pull_requests) owned by a member account that has
+# Cursor Bugbot enabled for this org/repo. The "Post" step then attributes the
+# comment to that user so @cursoragent is honored.
+#
 # Refs:
 #   https://cursor.com/docs/bugbot
 #   https://forum.cursor.com/t/bugbot-not-working-despite-github-app-reinstallation/150255
@@ -77,12 +85,18 @@ jobs:
             core.info(`No Bugbot status on ${HEAD_SHA}; will post @cursoragent review.`);
             core.setOutput('post', 'true');
 
+      - name: Warn if posting as github-actions (may be ignored by Cursor)
+        if: steps.gate.outputs.post == 'true' && secrets.CURSOR_PR_AUTOMATION_TOKEN == ''
+        run: |
+          echo "::notice title=Cursor Bugbot::CURSOR_PR_AUTOMATION_TOKEN is not set. The review trigger comment will be created as github-actions[bot] and Cursor may ignore it. Add CURSOR_PR_AUTOMATION_TOKEN (PAT) so the comment is attributed to a real member who has Bugbot enabled."
+
       - name: Post cursoragent review comment
         if: steps.gate.outputs.post == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         with:
+          github-token: ${{ secrets.CURSOR_PR_AUTOMATION_TOKEN != '' && secrets.CURSOR_PR_AUTOMATION_TOKEN || github.token }}
           script: |
             const prNumber = Number(process.env.PR_NUMBER);
             await github.rest.issues.createComment({
