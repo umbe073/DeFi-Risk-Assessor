@@ -107,6 +107,27 @@ def _redact_headers_for_log(headers: object) -> dict:
     return out
 
 
+def _safe_url_for_log(url: str) -> str:
+    """Return a URL safe for logs by removing query string and fragment entirely."""
+    try:
+        parsed = urlparse(str(url or '').strip())
+        return urlunparse(parsed._replace(query='', fragment=''))
+    except Exception:
+        return '[unparseable_url]'
+
+
+def _redact_params_for_log(params: object) -> str:
+    """Describe request params without printing values (may include API keys)."""
+    if params is None:
+        return 'none'
+    if isinstance(params, dict):
+        keys = sorted(str(k) for k in params.keys())
+        return 'param_keys=' + ','.join(keys) if keys else 'params_empty'
+    if isinstance(params, (list, tuple)):
+        return f'{type(params).__name__}(len={len(params)})'
+    return 'params=[omitted]'
+
+
 # Legacy cache management functions (fallback)
 def load_cached_data(token_address):
     """Load cached data for a token, fallback to real-time if not available"""
@@ -4115,7 +4136,7 @@ def robust_request(method, url, **kwargs):
                     if not quiet_http_errors:
                         print(f"❌ API Error: {response.status_code} {response.reason} for {_redact_url_query_for_log(url)}")
                         if kwargs.get('params'):
-                            print(f"   Params: {kwargs.get('params', {})}")
+                            print(f"   Params: {_redact_params_for_log(kwargs.get('params'))}")
                         
                         if response.status_code not in [401, 403, 404, 429] and response.text:
                             print(f"   Response: {response.text[:200]}...")
@@ -4128,7 +4149,7 @@ def robust_request(method, url, **kwargs):
         except requests.exceptions.RequestException as e:
             if not quiet_http_errors:
                 print(f"❌ Request Error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}")
-                print(f"   URL: {_redact_url_query_for_log(url)}")
+                print(f"   URL: {_safe_url_for_log(url)}")
                 print(f"   Method: {method}")
                 print(f"   Headers: {_redact_headers_for_log(kwargs.get('headers', {}))}")
             
@@ -4144,7 +4165,7 @@ def robust_request(method, url, **kwargs):
                 time.sleep(delay)
             else:
                 if not quiet_http_errors:
-                    print(f"   Max retries reached for {_redact_url_query_for_log(url)}")
+                    print(f"   Max retries reached for host={_safe_url_hostname(url)}")
                 return None
     
     return None
