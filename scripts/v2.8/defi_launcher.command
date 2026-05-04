@@ -4,9 +4,10 @@
 
 echo "🚀 Launching DeFi Risk Assessment..."
 
-# Set the project root
-PROJECT_ROOT="/Users/amlfreak/Desktop/venv/scripts/v2.0"
-cd "$PROJECT_ROOT"
+# Repo root (…/DeFi-Risk-Assessor), then app tree under scripts/v2.8
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$HERE/../.." && pwd)"
+cd "$HERE"
 
 # Check if system tray is already running
 if pgrep -f "system_tray.py" > /dev/null; then
