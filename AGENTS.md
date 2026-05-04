@@ -50,7 +50,7 @@ The same rules are available in `.cursor/rules/` for the Cursor IDE.
 3. **Never commit** `.env`, `*.db`, `*.key`, `*.pem`, or `logs/`. `scripts/v2.8/data/` may be committed when the user explicitly asks for v2.8 data publication and after `.gitignore` filters keep DBs, pyc, logs, temp/corrupt cache files, key material, env files, and runtime caches out of Git. Root `/data/` remains ignored unless explicitly requested separately.
 4. **Never suggest** React, Tailwind, ORMs, or Node.js unless explicitly asked
 5. **Fix CI failures** without being asked when you see them in the PR
-6. **Commit and push repo-facing changes** when the task is done: stage **only** paths this task touched (e.g. `.github/workflows/`, `scripts/v2.8/**`, deploy docs), commit with Conventional Commits, run `git push origin main`. Do **not** leave workflow or `v2.8` fixes uncommitted (that produces “Everything up-to-date” with no deploy). Never `git add -A` unrelated WIP (bulk `scripts/v2.0/`, ignored portal trees). If push cannot be run here, tell the user explicitly and paste the exact `git add` / `git commit` / `git push` block.
+6. **Commit and push repo-facing changes** when the task is done: stage **only** paths this task touched (e.g. `.github/workflows/`, `scripts/v2.8/**`), commit with Conventional Commits, run `git push origin main`. Do **not** commit `scripts/v2.0/web_portal/`, `scripts/v2.0/deploy/`, or `scripts/v2.8/deploy/` (`.gitignore` + CI guard). Never `git add -A` unrelated WIP. If push cannot be run here, tell the user explicitly and paste the exact `git add` / `git commit` / `git push` block.
 
 ---
 
@@ -72,17 +72,7 @@ The same rules are available in `.cursor/rules/` for the Cursor IDE.
 
 ## Manual web portal deploy (production VPS)
 
-When the user asks to deploy **web portal** changes to production, give the **compiled** command (no placeholders). Default SSH target for this project:
-
-- **User@host**: `linuxuser@80.240.31.172`
-
-From repo root:
-
-```bash
-cd /Users/amlfreak/Desktop/venv && bash scripts/v2.0/web_portal/deploy/deploy_web_portal_safe.sh linuxuser@80.240.31.172
-```
-
-The script uses defaults: remote tmp `/tmp/hodler-suite-web-portal/`, app dir `/opt/hodler-suite/web_portal/`, service `hodler-web-portal.service`. It does **not** rsync `.env`, `web_portal.env`, or `data/`.
+The Flask web portal and its deploy scripts are **not** in the public Git tree. They live in a **private** checkout or on the server. When the user asks to deploy web portal changes, use the **internal** runbook and `deploy_web_portal_safe.sh` from that private tree (SSH target, paths, and flags are internal-only). Never paste production hosts, keys, or full `.env` examples into issues or this repository.
 
 ---
 
@@ -122,7 +112,7 @@ Tag `@codex` in PR comments to flag updates needed to this file.
 
 | Service | Path | Port | Start command |
 |---------|------|------|---------------|
-| Web Portal | `scripts/v2.0/web_portal/` | 5050 | `cd scripts/v2.0/web_portal && set -a && source .env && set +a && python3 run.py` |
+| Web Portal | (private checkout; not in this repo) | 5050 | See internal runbook: `set -a && source .env && set +a && python3 run.py` in the portal root |
 | Script API | `scripts/v2.8/` | 5001 | `cd scripts/v2.8 && python3 -c "from webhook_server import app; app.run(host='127.0.0.1', port=5001)"` |
 
 ### Gotchas
@@ -143,11 +133,7 @@ flake8 scripts/v2.8 --max-line-length=120 --extend-ignore=E501,W503,E203
 # v2.8 tests (skip tkinter-dependent system tests)
 cd scripts/v2.8 && python3 -m pytest tests/test_core.py tests/test_scorers.py -v
 
-# Web portal lint
-cd scripts/v2.0/web_portal && python3 -m flake8 app tests --max-line-length=120 --extend-ignore=E501,W503,E203
-
-# Web portal tests
-cd scripts/v2.0/web_portal && python3 -m pytest tests/test_security_context.py -v
+# Web portal lint/tests: run in your private web_portal checkout (not in this repository)
 ```
 
 ### Master account credentials (local dev)

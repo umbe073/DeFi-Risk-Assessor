@@ -32,6 +32,10 @@ jobs:
       - name: Install tools
         run: |
           pip install -q flake8 pyflakes
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ripgrep
+          fi
 
       - name: Install gitleaks
         run: |
@@ -64,6 +68,11 @@ jobs:
           fi
           if rg '^scripts/v2\.8/web_portal/' /tmp/changed-files.txt >/dev/null; then
             echo "::error::Website files under scripts/v2.8/web_portal are forbidden from push scope."
+            exit 1
+          fi
+          if rg '^scripts/v2\.0/(web_portal|deploy)/|^scripts/v2\.8/deploy/' /tmp/changed-files.txt >/dev/null; then
+            echo "::error::Operational paths (scripts/v2.0/web_portal, scripts/v2.0/deploy, scripts/v2.8/deploy) must not be committed — keep local/server-only."
+            rg '^scripts/v2\.0/(web_portal|deploy)/|^scripts/v2\.8/deploy/' /tmp/changed-files.txt || true
             exit 1
           fi
 
@@ -118,13 +127,15 @@ jobs:
         run: |
           bad_env=$(git ls-files | rg -n '(^|/)\.env($|\.|/)' || true)
           bad_db=$(git ls-files | rg -n '\.(db|db-shm|db-wal|sqlite|sqlite3)$' || true)
-          if [ -n "$bad_env" ] || [ -n "$bad_db" ]; then
+          bad_ops=$(git ls-files | rg -n '^scripts/v2\.0/(web_portal|deploy)/|^scripts/v2\.8/deploy/' || true)
+          if [ -n "$bad_env" ] || [ -n "$bad_db" ] || [ -n "$bad_ops" ]; then
             echo "::error::Forbidden tracked files detected."
             echo "$bad_env"
             echo "$bad_db"
+            echo "$bad_ops"
             exit 1
           fi
 
       - name: v2.8 smoke check
         run: |
-          bash scripts/v2.8/deploy/verify_v2_8_smoke.sh "$GITHUB_WORKSPACE"
+          bash scripts/v2.8/ci/verify_v2_8_smoke.sh "$GITHUB_WORKSPACE"

@@ -11,7 +11,7 @@ Hodler Suite is developed from the current `main` branch. Security fixes target:
 | --- | --- |
 | Current `main` branch | Yes |
 | Production app runtime deployed from `scripts/v2.8` | Yes |
-| Manual web portal deployment under `scripts/v2.0/web_portal` | Yes |
+| Manual web portal (private checkout / server; not in this repository) | Yes |
 | Historical snapshots, local experiments, and archived scripts | No |
 
 ## Reporting a Vulnerability
@@ -46,10 +46,10 @@ Security fixes should include focused tests where practical and should not expos
 
 In scope:
 
-- Flask routes and blueprints under `scripts/v2.0/web_portal/app/`.
-- GitHub Actions, deployment scripts, systemd units, and SSH deploy flow.
+- Flask routes and blueprints in **your private** web portal tree (not published in this repository).
+- GitHub Actions and the SSH-based deploy entrypoint (server-side deploy scripts are private ops).
 - Webhook verification, Slack/email integrations, billing callbacks, and Turnstile/browser integrity flows.
-- Credential handling, `.env` examples, API key validation, logging redaction, and SQLite data stores.
+- Credential handling, API key validation, logging redaction, and SQLite data stores (never commit real `.env` or operational examples).
 - File upload, attachment, ClamAV, and support-ticket paths.
 
 Out of scope:
@@ -84,6 +84,7 @@ review.
 ## Operator Notes
 
 - Never commit `.env`, private keys, SQLite databases, logs, or raw runtime caches.
+- The web portal tree, `scripts/v2.0/deploy/`, and `scripts/v2.8/deploy/` are **out of Git scope** for this project; keep them on private workstations or the server. Removing them from the default branch does **not** erase past revisions from Git history—if a credential or operational file was ever pushed, **rotate the secret** and, if the repository is or was public, use a history rewrite (for example `git filter-repo` or BFG) with force-push only after team agreement.
 - Rotate any credential suspected of being exposed.
 - Keep deployment secrets in GitHub Actions secrets or server environment files, not in the repository.
 - Prefer HMAC/signature verification for incoming webhooks.

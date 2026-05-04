@@ -19,8 +19,7 @@ need.
 
 ## Scope
 
-- [ ] `scripts/v2.8` app/risk/GitOps path
-- [ ] `scripts/v2.0/web_portal` manual web portal path
+- [ ] `scripts/v2.8` app/risk path (GitHub source-of-truth)
 - [ ] `.github` workflows or repo automation
 - [ ] Documentation only
 - [ ] Other:
@@ -44,8 +43,8 @@ Commands run:
 ## Deployment / Rollback
 
 - Deployment path:
-  - [ ] GitHub Actions auto-deploy (`scripts/v2.8`)
-  - [ ] Manual web portal deploy (`scripts/v2.0/web_portal`)
+  - [ ] GitHub Actions auto-deploy (`scripts/v2.8` → server; deploy driver script is server-side/private ops)
+  - [ ] Manual web portal / ops deploy (not from this repository — private checkout or server)
   - [ ] No deploy required
 
 Rollback notes:
