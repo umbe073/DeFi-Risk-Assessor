@@ -129,10 +129,9 @@ def _summarize_ethplorer_error_payload(error_data: object) -> str:
         return 'non_dict_payload'
     err_obj = error_data.get('error')
     if isinstance(err_obj, dict):
-        msg = str(err_obj.get('message', ''))
-        if msg:
-            return f'ethplorer_error_with_message_len={len(msg)}'
-        return 'ethplorer_error_without_message'
+        # Intentionally do not log any payload-derived fields (for example
+        # message/code), because upstream responses may reflect sensitive input.
+        return 'dict_error_payload'
     return 'unknown_error_shape'
 
 
