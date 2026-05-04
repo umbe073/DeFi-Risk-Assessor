@@ -121,7 +121,7 @@ if sys.platform == "darwin":
     os.environ['CFBundleIdentifier'] = 'com.apple.ScriptEditor.id.Token-Risk-Assessment-Tool'
 
 # Import required packages
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 
 _webhook_log = logging.getLogger(__name__)
 import requests
@@ -3941,10 +3941,18 @@ def health_check():
 
 
 @app.route('/webhook/health/deep/<chain>', methods=['GET'])
-def deep_health_check(chain):
+def deep_health_check(chain: str):
     """Chain-specific deep health endpoint based on cache freshness."""
-    payload, http_status = _build_chain_deep_health_snapshot(chain)
-    return jsonify(payload), http_status
+    # Avoid reflecting raw path segments via jsonify (CodeQL py/reflective-xss): normalize early,
+    # then return a JSON body without routing the URL parameter through Flask's HTML-aware helper.
+    safe_chain = re.sub(r'[^a-zA-Z0-9/_-]+', '', str(chain or ''))[:128].lower().strip('/')
+    payload, http_status = _build_chain_deep_health_snapshot(safe_chain)
+    body = json.dumps(payload, ensure_ascii=True, separators=(',', ':'))
+    return Response(
+        body,
+        status=http_status,
+        mimetype='application/json; charset=utf-8',
+    )
 
 def run_webhook_server():
     """Run the webhook server"""

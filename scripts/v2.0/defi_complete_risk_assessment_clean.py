@@ -124,14 +124,14 @@ def _redact_params_for_log(params: object) -> str:
 
 
 def _summarize_ethplorer_error_payload(error_data: object) -> str:
-    """Summarize Ethplorer JSON error responses without logging payload values (may contain secrets)."""
+    """Summarize Ethplorer JSON error responses without logging full payloads (may contain secrets)."""
     if not isinstance(error_data, dict):
         return 'non_dict_payload'
     err_obj = error_data.get('error')
     if isinstance(err_obj, dict):
-        has_message = 'message' in err_obj
-        has_code = 'code' in err_obj
-        return f'error_obj_present message_field_present={has_message} code_field_present={has_code}'
+        msg = str(err_obj.get('message', ''))
+        code = err_obj.get('code', '')
+        return f'code={code!r} message_len={len(msg)}'
     return 'unknown_error_shape'
 
 
@@ -4167,7 +4167,7 @@ def robust_request(method, url, **kwargs):
             if not quiet_http_errors:
                 print(f"❌ Request Error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}")
                 print(f"   URL: {_safe_url_for_log(url)}")
-                print(f"   Method: {method}")
+                print("   Method: [redacted]")
                 print("   Headers: [redacted]")
             
             log_failed_api_endpoint(api_name_for_log, url, type(e).__name__)
