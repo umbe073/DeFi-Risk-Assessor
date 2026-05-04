@@ -1,12 +1,12 @@
-name: Bug report
-description: Report a reproducible problem in Hodler Suite.
+name: Internal bug report
+description: Report a reproducible problem in the Hodler Suite UAB SaaS platform.
 title: "fix: "
 labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug. Do not include secrets, cookies, private keys, webhook URLs, signed URLs, customer data, or raw logs containing sensitive data.
+        This is a private Hodler Suite UAB repository. Do not include secrets, cookies, private keys, webhook URLs, signed URLs, customer data, or raw logs containing sensitive data.
 
   - type: textarea
     id: summary
@@ -91,5 +91,5 @@ body:
       options:
         - label: I removed secrets, private keys, tokens, cookies, webhook URLs, signed URLs, and customer data.
           required: true
-        - label: This is not a security vulnerability report. If it is, I will follow SECURITY.md instead.
+        - label: This is not a security vulnerability report. If it is, I will follow the private SECURITY.md process instead.
           required: true
