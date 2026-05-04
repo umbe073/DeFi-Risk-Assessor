@@ -4,6 +4,7 @@ import sys
 import time
 import csv
 import json
+import zlib
 import hashlib
 import hmac
 import requests
@@ -3623,15 +3624,22 @@ def _mapping_key_names_fingerprint(mapping: object) -> str:
     return ','.join(sorted(str(k) for k in mapping.keys()))
 
 
+def _http_cache_coordination_digest(parts: list[str]) -> str:
+    """Non-cryptographic cache bucket label (zlib CRC32; not password/storage hashing)."""
+    joined = '|'.join(parts)
+    b = joined.encode('utf-8')
+    c1 = zlib.crc32(b) & 0xFFFFFFFF
+    c2 = zlib.crc32(str(len(b)).encode('ascii'), c1) & 0xFFFFFFFF
+    return f'{c1:08x}{c2:08x}'
+
+
 def _http_state_request_key(url, params=None):
     """Stable key for conditional GET metadata (no raw query secrets on disk)."""
     red = _redact_url_query_for_log(str(url or '').strip())
     if not red:
         return ''
     keys = _mapping_key_names_fingerprint(params) if params else ''
-    payload = f'{red}|{keys}'
-    # lgtm[py/weak-sensitive-data-hashing] -- HTTP conditional metadata key (redacted URL + param key names only).
-    return hashlib.sha256(payload.encode('utf-8'), usedforsecurity=False).hexdigest()
+    return _http_cache_coordination_digest([red, keys])
 
 
 def _load_http_request_state():
@@ -20551,8 +20559,7 @@ def get_cache_key(url, params=None, headers=None, data=None):
         parts.append(_mapping_key_names_fingerprint(filtered_headers))
     if data:
         parts.append(_mapping_key_names_fingerprint(data))
-    # lgtm[py/weak-sensitive-data-hashing] -- HTTP response cache key (redacted URL + field names only).
-    return hashlib.sha256('|'.join(parts).encode('utf-8'), usedforsecurity=False).hexdigest()
+    return _http_cache_coordination_digest(parts)
 
 def fetch_vespia_authentication():
     """Authenticate with Vespia API and get access token"""

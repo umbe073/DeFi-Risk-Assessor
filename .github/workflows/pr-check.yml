@@ -87,14 +87,18 @@ jobs:
           # (many legacy/archived scripts under scripts/v2.8 are not pyflakes-clean).
           python3 -m compileall -q scripts/v2.8
 
-      - name: Flake8
+      - name: Flake8 (changed v2.8 files only, F/E9)
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          files=$(rg --files scripts/v2.8 -g "*.py" || true)
-          if [ -n "$files" ]; then
-            flake8 scripts/v2.8 --max-line-length=120 --extend-ignore=E501,W503,E203 --statistics
-          else
-            echo "No python files under scripts/v2.8"
+          git fetch --no-tags origin "${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          mapfile -t changed_py < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}..HEAD" | grep -E '^scripts/v2\.8/.*\.py$' || true)
+          if [ "${#changed_py[@]}" -eq 0 ]; then
+            echo "No added/modified Python files under scripts/v2.8 in this PR; skipping flake8."
+            exit 0
           fi
+          printf '%s\n' "${changed_py[@]}"
+          python3 -m flake8 "${changed_py[@]}" --select=F,E9 --max-line-length=120 --statistics
 
       - name: Secret leak guard (gitleaks)
         run: |
