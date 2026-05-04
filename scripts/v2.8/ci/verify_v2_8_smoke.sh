@@ -28,12 +28,12 @@ fi
 echo "[smoke] checking hardcoded v2.0 leftovers (excluding this script + archive/)"
 # Exclude: (1) this file, which must mention the forbidden substrings; (2) historical archive copies.
 if rg -n "/scripts/v2\\.0|/venv/data/risk_reports|/venv/data/social_reports" "${V2_DIR}" \
-  --glob '!deploy/verify_v2_8_smoke.sh' \
+  --glob '!ci/verify_v2_8_smoke.sh' \
   --glob '!archive/**' \
   >/dev/null 2>&1; then
   echo "[smoke] found legacy hardcoded path(s), review before deploy:" >&2
   rg -n "/scripts/v2\\.0|/venv/data/risk_reports|/venv/data/social_reports" "${V2_DIR}" \
-    --glob '!deploy/verify_v2_8_smoke.sh' \
+    --glob '!ci/verify_v2_8_smoke.sh' \
     --glob '!archive/**' \
     || true
   exit 1
