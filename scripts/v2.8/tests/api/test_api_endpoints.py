@@ -56,8 +56,9 @@ def test_coingecko_endpoints():
     
     # Test 3: Contract address lookup
     try:
-        token_address = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"  # UNI
-        url = f"https://api.coingecko.com/api/v3/coins/ethereum/contract/{token_address}"
+        # Public UNI token contract (mainnet); not a generic API key.
+        uni_contract = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
+        url = f"https://api.coingecko.com/api/v3/coins/ethereum/contract/{uni_contract}"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
@@ -198,8 +199,9 @@ def test_ethplorer_endpoints():
     
     # Test token info
     try:
-        token_address = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"  # UNI
-        url = f"https://api.ethplorer.io/getTokenInfo/{token_address}?apiKey=freekey"
+        # Public UNI token contract (mainnet); not a generic API key.
+        uni_contract = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
+        url = f"https://api.ethplorer.io/getTokenInfo/{uni_contract}?apiKey=freekey"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
