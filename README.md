@@ -1,4 +1,11 @@
-# DeFi-Risk-Assessor
+# DeFi-Risk-Assessor (Hodler Suite)
+
+**Access:** This repository is intended to be **private** to [COMPANY_LEGAL_NAME]. Do not share, fork, or mirror outside authorized systems. To make the GitHub project private: **Repository → Settings → General → Danger Zone → Change repository visibility → Make private** (requires org/repo admin; review GitHub’s notes on forks, stars, and integrations first).
+
+**License:** The contents of this repository are **proprietary** unless a separate written agreement says otherwise. See `LICENSE` (replace placeholders after legal review).
+
+---
+
 The DeFi Complete Risk Assessment Suite is a Python-based engine for automated, explainable token risk assessments. It is designed for AML analysts, hedge funds, listing managers, exchanges, and institutional risk teams who need a consistent way to evaluate DeFi tokens across multiple chains and data providers.
 
 What this engine does?

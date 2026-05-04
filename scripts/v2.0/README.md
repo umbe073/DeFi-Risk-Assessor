@@ -180,15 +180,11 @@ export DEBUG=1
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly on macOS
-5. Submit a pull request
+This tree is part of a **private, proprietary** repository. Contributing is limited to **authorized** collaborators under company agreements—see the root `CONTRIBUTING.md` and `LICENSE`.
 
 ## License
 
-MIT License - see LICENSE file for details
+Proprietary — see the repository root `LICENSE` (legal sign-off required; replace placeholders).
 
 ## Support
 
