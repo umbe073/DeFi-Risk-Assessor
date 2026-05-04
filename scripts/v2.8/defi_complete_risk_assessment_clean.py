@@ -96,14 +96,13 @@ def _safe_url_hostname(url: str) -> str:
 
 
 def _redact_url_query_for_log(url: str) -> str:
-    """Strip sensitive query keys before printing URLs to stdout/logs."""
-    sensitive = {'apikey', 'api_key', 'key', 'token', 'secret', 'password', 'auth'}
+    """Redact all query parameter values before printing URLs to stdout/logs."""
     try:
         parsed = urlparse(str(url or ''))
         if not parsed.query:
             return str(url or '')
         pairs = parse_qsl(parsed.query, keep_blank_values=True)
-        redacted = [(k, '[redacted]' if k.lower() in sensitive else v) for k, v in pairs]
+        redacted = [(k, '[redacted]') for k, _v in pairs]
         new_query = urlencode(redacted)
         return urlunparse(parsed._replace(query=new_query))
     except Exception:
