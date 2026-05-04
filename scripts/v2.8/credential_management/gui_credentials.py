@@ -576,7 +576,7 @@ class GuiCreds:
                 messagebox.showerror("Load failed", "Please enter a master password first.")
                 return
             
-            print(f"🔍 Attempting to load store with password: {password[:3]}***")
+            print("🔍 Attempting to load store (master password provided; not logged)")
 
             if not (os.path.exists(self.paths['enc_path']) and os.path.exists(self.paths['meta_path'])):
                 self._write({}, reuse_salt=False)

@@ -72,6 +72,7 @@ import tempfile
 import signal
 import subprocess
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 # App bundle mode is now handled by the macOS compatibility fix
 # No need for separate dock utilities
@@ -1281,8 +1282,9 @@ class APIServiceDashboard:
                         message = f"✅ Success: {service['name']} responded correctly"
                 elif service_id == 'dune':
                     success = True
-                    rurl = str(getattr(response, "url", "") or "").lower()
-                    if "sim.dune.com" in rurl:
+                    rurl = str(getattr(response, "url", "") or "")
+                    resp_host = (urlparse(rurl).hostname or "").lower()
+                    if resp_host == "api.sim.dune.com":
                         message = (
                             f"✅ Success: {service['name']} (SIM on api.sim.dune.com; matches DUNE_SIM_* usage)"
                         )

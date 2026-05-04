@@ -149,6 +149,18 @@ def _redact_params_for_log(params: object) -> str:
     return 'params_present'
 
 
+def _summarize_ethplorer_error_payload(error_data: object) -> str:
+    """Summarize Ethplorer JSON error responses without logging full payloads (may contain secrets)."""
+    if not isinstance(error_data, dict):
+        return 'non_dict_payload'
+    err_obj = error_data.get('error')
+    if isinstance(err_obj, dict):
+        msg = str(err_obj.get('message', ''))
+        code = err_obj.get('code', '')
+        return f'code={code!r} message_len={len(msg)}'
+    return 'unknown_error_shape'
+
+
 # Legacy cache management functions (fallback)
 def load_cached_data(token_address):
     """Load cached data for a token, fallback to real-time if not available"""
@@ -3059,7 +3071,7 @@ def fetch_ethplorer_token_info(address):
                 print(f"    ⚠️  Address {address} is not a token contract")
                 return None
             else:
-                print(f"    ❌ Ethplorer API error: {error_data}")
+                print(f"    ❌ Ethplorer API error: {_summarize_ethplorer_error_payload(error_data)}")
                 return None
         else:
             print(f"    ❌ Ethplorer API failed: {response.status_code if response else 'No response'}")
@@ -3090,7 +3102,7 @@ def fetch_ethplorer_address_info(address):
                 return None
         elif response and response.status_code == 400:
             error_data = response.json()
-            print(f"    ❌ Ethplorer Address API error: {error_data}")
+            print(f"    ❌ Ethplorer Address API error: {_summarize_ethplorer_error_payload(error_data)}")
             return None
         else:
             print(f"    ❌ Ethplorer Address API failed: {response.status_code if response else 'No response'}")
@@ -4370,7 +4382,7 @@ def robust_request(method, url, **kwargs):
                     return response
 
                 if not quiet_http_errors:
-                    print(f"    ⚠️  Rate limit hit for {domain}, waiting {delay}s...")
+                    print(f"    ⚠️  Rate limit hit for {service_key}, waiting {delay}s...")
                 time.sleep(delay)
                 continue
             
@@ -4387,7 +4399,7 @@ def robust_request(method, url, **kwargs):
                             print(f"   Params: {_redact_params_for_log(kwargs.get('params'))}")
                         
                         if response.status_code not in [401, 403, 404, 429] and response.text:
-                            print(f"   Response: {response.text[:200]}...")
+                            print(f"   Response: [redacted body len={len(response.text)}]")
                 
                 if response.status_code not in [404]:
                     log_failed_api_endpoint(api_name_for_log, url, f"{response.status_code} {response.reason}")
@@ -4399,9 +4411,9 @@ def robust_request(method, url, **kwargs):
                 print(f"❌ Request Error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}")
                 print(f"   URL: {_safe_url_for_log(url)}")
                 print("   Method: [REDACTED]")
-                print(f"   Headers: {_redact_headers_for_log(kwargs.get('headers', {}))}")
+                print("   Headers: [redacted]")
             
-            log_failed_api_endpoint(api_name_for_log, url, str(e))
+            log_failed_api_endpoint(api_name_for_log, url, type(e).__name__)
             
             if attempt < max_retries - 1:
                 if is_chainabuse:
@@ -17263,11 +17275,16 @@ class DeFiRiskAssessor:
                         if graphql_errors:
                             schema_mismatch_protocols.append(protocol)
                             try:
-                                first_err = str(graphql_errors[0].get('message', 'GraphQL schema mismatch'))
+                                first_err_len = len(
+                                    str(graphql_errors[0].get('message', 'GraphQL schema mismatch'))
+                                )
                             except Exception:
-                                first_err = 'GraphQL schema mismatch'
+                                first_err_len = 0
                             if verbose_logs:
-                                print(f"    ⚠️  {protocol} schema mismatch/no indexed pools: {first_err}")
+                                print(
+                                    f"    ⚠️  {protocol} schema mismatch/no indexed pools "
+                                    f"(graphql message redacted; len={first_err_len})"
+                                )
                     else:
                         status_msg = response.status_code if response else 'No response'
                         if response and response.status_code == 429:

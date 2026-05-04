@@ -9,6 +9,7 @@ import sys
 import json
 import time
 import threading
+import logging
 import re
 import hashlib
 import hmac
@@ -121,6 +122,8 @@ if sys.platform == "darwin":
 
 # Import required packages
 from flask import Flask, request, jsonify
+
+_webhook_log = logging.getLogger(__name__)
 import requests
 
 # Add project root to path
@@ -3554,10 +3557,10 @@ class WebhookServer:
             }
             
         except Exception as e:
-            print(f"❌ Error in enhanced update_all_cache: {e}")
+            _webhook_log.exception('enhanced_update_all_cache_failed')
             return {
                 'status': 'error',
-                'message': str(e)
+                'message': 'internal_error',
             }
     
     def _update_all_cache_basic(self):
@@ -3603,10 +3606,10 @@ class WebhookServer:
             }
             
         except Exception as e:
-            print(f"❌ Error in basic update_all_cache: {e}")
+            _webhook_log.exception('basic_update_all_cache_failed')
             return {
                 'status': 'error',
-                'message': str(e)
+                'message': 'internal_error',
             }
 
 # Initialize webhook server
@@ -3624,12 +3627,12 @@ def _run_update_all_background_job():
     try:
         result = webhook_server.update_all_cache()
     except Exception as e:
+        _webhook_log.exception('async_update_all_job_failed')
         result = {
             'status': 'error',
-            'message': str(e),
+            'message': 'internal_error',
             'timestamp': datetime.now().isoformat()
         }
-        print(f"❌ Async update_all job failed: {e}")
     with update_all_lock:
         update_all_inflight = False
         update_all_last_finished = datetime.now().isoformat()
@@ -3648,6 +3651,21 @@ def _extract_token_update_ts(entry: Any) -> float:
         if ts > 0:
             return ts
     return 0.0
+
+
+def _sanitize_stale_token_key_for_json(token_key: object) -> str:
+    raw = str(token_key or '')
+    cleaned = ''.join(ch for ch in raw if ch.isalnum() or ch in {'-', '_', '.'})[:72]
+    return cleaned or 'unknown'
+
+
+def _sanitize_async_job_result_for_public(result: object) -> object:
+    if not isinstance(result, dict):
+        return result
+    out = dict(result)
+    if str(out.get('status', '')).lower() == 'error':
+        out['message'] = 'internal_error'
+    return out
 
 
 def _build_chain_deep_health_snapshot(chain_hint: str) -> tuple[dict[str, Any], int]:
@@ -3693,7 +3711,7 @@ def _build_chain_deep_health_snapshot(chain_hint: str) -> tuple[dict[str, Any], 
             continue
         stale_tokens += 1
         if len(stale_examples) < 5:
-            stale_examples.append(str(token_key))
+            stale_examples.append(_sanitize_stale_token_key_for_json(token_key))
 
     status = 'healthy'
     http_status = 200
@@ -3763,19 +3781,23 @@ def update_all_cache():
     
     try:
         result = webhook_server.update_all_cache()
-        
+        safe_result = _sanitize_async_job_result_for_public(result)
+        if not isinstance(safe_result, dict):
+            safe_result = {'status': 'error', 'message': 'internal_error', 'total_tokens': 0}
         return jsonify({
-            'status': result['status'],
-            'message': result['message'],
+            'status': safe_result['status'],
+            'message': safe_result.get('message', ''),
             'timestamp': datetime.now().isoformat(),
-            'total_tokens': result.get('total_tokens', 0)
-        }), 200 if result['status'] == 'success' else 500
+            'total_tokens': safe_result.get('total_tokens', 0)
+        }), 200 if safe_result['status'] == 'success' else 500
         
     except Exception as e:
+        _webhook_log.exception('update_all_route_failed')
         return jsonify({
             'status': 'error',
-            'message': str(e),
-            'timestamp': datetime.now().isoformat()
+            'message': 'internal_error',
+            'timestamp': datetime.now().isoformat(),
+            'correlation_id': str(uuid.uuid4()),
         }), 500
 
 
@@ -3792,7 +3814,7 @@ def get_update_all_status():
             'in_progress': bool(update_all_inflight),
             'started_at': update_all_last_started,
             'finished_at': update_all_last_finished,
-            'last_result': update_all_last_result,
+            'last_result': _sanitize_async_job_result_for_public(update_all_last_result),
             'timestamp': datetime.now().isoformat()
         })
 
@@ -3855,10 +3877,12 @@ def update_single_token():
                 }), 404
                 
     except Exception as e:
+        _webhook_log.exception('update_single_token_route_failed')
         return jsonify({
             'status': 'error',
-            'message': str(e),
-            'timestamp': datetime.now().isoformat()
+            'message': 'internal_error',
+            'timestamp': datetime.now().isoformat(),
+            'correlation_id': str(uuid.uuid4()),
         }), 500
 
 @app.route('/webhook/status', methods=['GET'])

@@ -303,14 +303,14 @@ def rate_limited_get(url, timeout=10):
     elapsed = time.time() - _last_coingecko_request
     if elapsed < COINGECKO_REQUEST_MIN_DELAY:
         time.sleep(COINGECKO_REQUEST_MIN_DELAY - elapsed)
-    parsed_host = (urlparse(str(url or '')).netloc or '').strip().lower()
+    parsed_host = (urlparse(str(url or '')).hostname or '').strip().lower()
     base_headers = {
         "Accept": "application/json",
         "User-Agent": "DeFiRiskAssessor/3.0",
     }
     header_variants = [dict(base_headers)]
     if COINGECKO_API_KEY:
-        if parsed_host.startswith("pro-api.coingecko.com"):
+        if parsed_host == 'pro-api.coingecko.com':
             if COINGECKO_KEY_MODE == 'pro':
                 header_variants = [
                     {**base_headers, "x-cg-pro-api-key": COINGECKO_API_KEY},
@@ -319,7 +319,7 @@ def rate_limited_get(url, timeout=10):
             else:
                 # Demo keys are not valid on pro hosts.
                 header_variants = [dict(base_headers)]
-        else:
+        elif parsed_host in {'api.coingecko.com', 'demo-api.coingecko.com'}:
             if COINGECKO_KEY_MODE == 'pro':
                 header_variants = [
                     {**base_headers, "x-cg-pro-api-key": COINGECKO_API_KEY},
