@@ -75,13 +75,26 @@ def _safe_url_hostname(url: str) -> str:
 
 def _redact_url_query_for_log(url: str) -> str:
     """Strip sensitive query keys before printing URLs to stdout/logs."""
-    sensitive = {'apikey', 'api_key', 'key', 'token', 'secret', 'password', 'auth'}
+    # Match common credential key variants after normalization (e.g. apiKey/api_key/api-key -> apikey)
+    sensitive = {
+        'apikey', 'key', 'token', 'accesstoken', 'idtoken', 'refreshtoken',
+        'secret', 'clientsecret', 'password', 'passwd', 'pwd', 'auth', 'authorization',
+        'signature', 'sig'
+    }
+
+    def _normalize_query_key(key: object) -> str:
+        k = str(key or '').strip().lower()
+        return ''.join(ch for ch in k if ch.isalnum())
+
     try:
         parsed = urlparse(str(url or ''))
         if not parsed.query:
             return str(url or '')
         pairs = parse_qsl(parsed.query, keep_blank_values=True)
-        redacted = [(k, '[redacted]' if k.lower() in sensitive else v) for k, v in pairs]
+        redacted = [
+            (k, '[redacted]' if _normalize_query_key(k) in sensitive else v)
+            for k, v in pairs
+        ]
         new_query = urlencode(redacted)
         return urlunparse(parsed._replace(query=new_query))
     except Exception:

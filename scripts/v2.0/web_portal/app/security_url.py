@@ -111,13 +111,26 @@ def safe_next_location(
 
 
 def join_trusted_base_url(base_url: str, path_and_query: str) -> str:
-    """Join configured site base with a request path; block // prefix open redirects."""
+    """Join configured site base with a safe same-site path/query suffix."""
     base = str(base_url or "").strip().rstrip("/")
-    suffix = str(path_and_query or "")
-    if suffix.startswith("//"):
-        suffix = "/"
-    elif not suffix.startswith("/"):
-        suffix = "/" + suffix
+    raw_suffix = str(path_and_query or "").strip()
+
+    # Normalize browser-tolerated separators and block header/control chars.
+    normalized = raw_suffix.replace("\\", "/")
+    if any(ch in normalized for ch in ("\r", "\n", "\x00")):
+        normalized = "/"
+
+    # Disallow absolute/scheme-relative forms; require local absolute path.
+    parsed = urlparse(normalized)
+    if parsed.scheme or parsed.netloc:
+        normalized = "/"
+        parsed = urlparse(normalized)
+
+    path = str(parsed.path or "")
+    if not path.startswith("/") or path.startswith("//"):
+        path = "/"
+
+    suffix = urlunparse(("", "", path, "", parsed.query, parsed.fragment))
     return f"{base}{suffix}"
 
 

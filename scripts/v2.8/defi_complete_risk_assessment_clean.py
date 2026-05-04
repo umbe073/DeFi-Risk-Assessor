@@ -586,6 +586,8 @@ def log_failed_api_endpoint(api_name, endpoint, error_message):
     global failed_api_endpoints
     now_iso = datetime.datetime.now().isoformat()
     key = _failed_endpoint_key(api_name, endpoint, error_message)
+    safe_api_name = str(api_name or "unknown").strip().lower() or "unknown"
+    safe_error_message = str(error_message or "unknown").strip()
 
     with _failed_api_endpoints_lock:
         existing_idx = _failed_api_endpoint_index.get(key)
@@ -606,8 +608,8 @@ def log_failed_api_endpoint(api_name, endpoint, error_message):
         failed_api_endpoints.append(failed_endpoint)
         _failed_api_endpoint_index[key] = len(failed_api_endpoints) - 1
 
-    # Also log to console (first occurrence only)
-    print(f"❌ API Error: {error_message} for {_redact_url_query_for_log(str(endpoint))}")
+    # Also log to console (first occurrence only) without endpoint details to avoid leaking secrets
+    print(f"❌ API Error [{safe_api_name}]: {safe_error_message}")
 
 def write_failed_endpoints_summary():
     """Write failed API endpoints to summary file"""

@@ -679,8 +679,8 @@ def _strip_html(html_text: str) -> str:
     raw = str(html_text)
     if len(raw) > 256 * 1024:
         raw = raw[: 256 * 1024]
-    no_script = re.sub(r"(?is)<script[^>]*>.*?</script>", " ", raw)
-    no_script = re.sub(r"(?is)<style[^>]*>.*?</style>", " ", no_script)
+    no_script = re.sub(r"(?is)<script\b[^>]*>.*?</script\b[^>]*>", " ", raw)
+    no_script = re.sub(r"(?is)<style\b[^>]*>.*?</style\b[^>]*>", " ", no_script)
     no_tags = re.sub(r"(?is)<[^>]{0,2000}>", " ", no_script)
     collapsed = re.sub(r"[ \t]+", " ", no_tags)
     return collapsed.strip()
