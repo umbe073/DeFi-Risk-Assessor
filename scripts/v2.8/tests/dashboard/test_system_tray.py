@@ -7,8 +7,6 @@ This script tests the ability to launch various services from the system tray
 import os
 import sys
 import subprocess
-import tempfile
-import json
 import time
 
 # Add the current directory to the path

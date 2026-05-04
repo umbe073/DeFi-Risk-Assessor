@@ -29,14 +29,14 @@ def test_cache_preservation():
         return
     
     # Check current cache configuration
-    print(f"📊 Cache Configuration:")
+    print("📊 Cache Configuration:")
     print(f"   Cache duration: {cache_manager.cache_duration_hours} hours")
     print(f"   Preserve duration: {cache_manager.preserve_duration_hours} hours")
     print(f"   Max cache size: {cache_manager.max_cache_size_mb} MB")
     
     # Check current cache stats
     stats = cache_manager.get_cache_stats()
-    print(f"\n📊 Current Cache Statistics:")
+    print("\n📊 Current Cache Statistics:")
     print(f"   Cache tokens: {stats.get('cache_tokens', 0)}")
     print(f"   Fallback tokens: {stats.get('fallback_tokens', 0)}")
     print(f"   Cache hits: {stats.get('cache_hits', 0)}")
@@ -94,11 +94,11 @@ def test_priority_data_fetching():
         try:
             result = cache_manager.fetch_data_with_intelligent_cache(token_address, mock_fetch_function)
             if result:
-                print(f"   ✅ Priority fetching successful")
+                print("   ✅ Priority fetching successful")
                 print(f"   Market data sources: {list(result.get('market_data', {}).keys())}")
                 print(f"   Onchain data sources: {list(result.get('onchain_data', {}).keys())}")
             else:
-                print(f"   ⚠️ No data returned")
+                print("   ⚠️ No data returned")
         except Exception as e:
             print(f"   ❌ Error: {e}")
 
@@ -127,12 +127,12 @@ def test_fallback_data_retrieval():
         try:
             fallback_data = cache_manager.get_fallback_data(token_address)
             if fallback_data:
-                print(f"   ✅ Fallback data available")
+                print("   ✅ Fallback data available")
                 data_age = (time.time() - fallback_data.get('timestamp', 0)) / 3600
                 print(f"   Age: {data_age:.1f} hours")
                 print(f"   Source: {fallback_data.get('source', 'unknown')}")
             else:
-                print(f"   ⚠️ No fallback data available")
+                print("   ⚠️ No fallback data available")
         except Exception as e:
             print(f"   ❌ Error: {e}")
 
@@ -154,7 +154,7 @@ def test_webhook_integration():
             print(f"   Cache age: {data.get('cache_age_hours', 0):.2f} hours")
             
             # Test cache update with priority system
-            print(f"\n🔄 Testing priority-based cache update...")
+            print("\n🔄 Testing priority-based cache update...")
             update_response = requests.post('http://localhost:5001/webhook/update_all', 
                                           json={}, timeout=30)
             if update_response.status_code == 200:
@@ -234,7 +234,7 @@ def test_cleanup_functionality():
         
         # Check stats after cleanup
         stats = cache_manager.get_cache_stats()
-        print(f"📊 After cleanup:")
+        print("📊 After cleanup:")
         print(f"   Cache tokens: {stats.get('cache_tokens', 0)}")
         print(f"   Fallback tokens: {stats.get('fallback_tokens', 0)}")
         
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     test_data_preservation()
     test_cleanup_functionality()
     
-    print(f"\n✅ Priority-based cache system test completed!")
+    print("\n✅ Priority-based cache system test completed!")
     print("💡 The system should now:")
     print("   1. Preserve data for 48 hours")
     print("   2. Use priority-based fetching strategy")

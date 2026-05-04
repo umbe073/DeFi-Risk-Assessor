@@ -4,11 +4,9 @@ Test script to verify individual API endpoints and identify issues
 """
 
 import os
-import sys
 import json
 import requests
 import time
-from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -145,7 +143,7 @@ def test_etherscan_endpoints():
                 print("✅ Etherscan Token Holder API working")
                 result = data.get('result', [])
                 if result:
-                    print(f"   UNI Token holders data available")
+                    print("   UNI Token holders data available")
             else:
                 print(f"❌ Etherscan Token Holder API error: {data.get('message', 'Unknown error')}")
                 print("   ⚠️ This might be why holder counts show 0")
@@ -266,5 +264,5 @@ if __name__ == "__main__":
     
     check_rate_limiting_status()
     
-    print(f"\n✅ API endpoint testing completed!")
+    print("\n✅ API endpoint testing completed!")
     print("💡 Check the results above to identify which APIs are failing")

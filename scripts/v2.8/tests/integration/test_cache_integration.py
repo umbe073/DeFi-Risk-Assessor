@@ -5,7 +5,6 @@ Test script to verify cache integration is working properly
 
 import os
 import sys
-import json
 from datetime import datetime
 
 # Add project paths
@@ -71,7 +70,7 @@ def test_cache_functionality():
             print("   ❌ Cache update failed")
     
     # Test cache stats
-    print(f"\n📊 Cache Statistics:")
+    print("\n📊 Cache Statistics:")
     try:
         stats = cache_manager.get_cache_stats()
         print(f"   Cache entries: {stats.get('cache_entries', 0)}")
@@ -112,7 +111,7 @@ def test_rate_limiting():
     # Test if we have the API error handler
     try:
         from api_error_handler import get_error_handler
-        error_handler = get_error_handler(DATA_DIR)
+        get_error_handler(DATA_DIR)
         print("✅ API error handler available")
         
         # Check rate limit status for different APIs
@@ -133,5 +132,5 @@ if __name__ == "__main__":
     check_webhook_integration()
     test_rate_limiting()
     
-    print(f"\n✅ Cache integration test completed!")
+    print("\n✅ Cache integration test completed!")
     print("💡 If you see issues, check the cache files in:", DATA_DIR)

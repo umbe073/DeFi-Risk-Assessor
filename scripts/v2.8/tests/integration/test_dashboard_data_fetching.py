@@ -7,7 +7,6 @@ import os
 import sys
 import json
 import requests
-from datetime import datetime
 
 # Add project paths
 PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
@@ -40,7 +39,7 @@ def test_ethplorer_direct():
                 price = data.get('price', {})
                 volume = data.get('volume24h', 0)
                 
-                print(f"   ✅ Success!")
+                print("   ✅ Success!")
                 print(f"   Holders: {holders:,}")
                 print(f"   Price: ${price.get('rate', 0):.4f}" if price else "   Price: N/A")
                 print(f"   Volume 24h: ${volume:,.0f}")
@@ -53,7 +52,7 @@ def test_ethplorer_direct():
                         market_cap = price_usd * supply
                         print(f"   Market Cap: ${market_cap:,.0f}")
                     except:
-                        print(f"   Market Cap: Unable to calculate")
+                        print("   Market Cap: Unable to calculate")
                         
             else:
                 print(f"   ❌ Error: {response.status_code}")
@@ -89,13 +88,13 @@ def test_coingecko_direct():
                 market_cap = market_data.get('market_cap', {}).get('usd', 0)
                 volume = market_data.get('total_volume', {}).get('usd', 0)
                 
-                print(f"   ✅ Success!")
+                print("   ✅ Success!")
                 print(f"   Price: ${price:,.4f}")
                 print(f"   Market Cap: ${market_cap:,.0f}")
                 print(f"   Volume 24h: ${volume:,.0f}")
                 
             elif response.status_code == 429:
-                print(f"   ⚠️ Rate limited! This explains empty cache data")
+                print("   ⚠️ Rate limited! This explains empty cache data")
             else:
                 print(f"   ❌ Error: {response.status_code}")
                 print(f"   Response: {response.text[:100]}")
@@ -194,5 +193,5 @@ if __name__ == "__main__":
     test_coingecko_direct()
     test_simple_coingecko()
     
-    print(f"\n✅ Dashboard data fetching test completed!")
+    print("\n✅ Dashboard data fetching test completed!")
     print("💡 Compare API results with current cache state to identify issues")

@@ -11,7 +11,7 @@ from datetime import datetime
 # Add the current directory to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from dune_analytics_api import DuneAnalyticsAPI, get_wallet_activity, get_token_holder_analysis, get_token_market_data, get_wallet_portfolio
+from dune_analytics_api import DuneAnalyticsAPI, get_wallet_activity, get_token_market_data
 
 def _extract_items(payload):
     """Best-effort list extraction from SIM Dune payloads."""
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     # Test API Dashboard Integration
     dashboard_success = test_api_dashboard_integration()
     
-    print(f"\n📊 Test Results:")
+    print("\n📊 Test Results:")
     print(f"   API Integration: {'✅ PASS' if api_success else '❌ FAIL'}")
     print(f"   API Dashboard Integration: {'✅ PASS' if dashboard_success else '❌ FAIL'}")
     
