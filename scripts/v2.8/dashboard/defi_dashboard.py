@@ -92,8 +92,8 @@ except ImportError:
         def get_cmc_name(symbol: str) -> Optional[str]: return None
         def get_cmc_slug(symbol: str) -> Optional[str]: return None
 
-# Project paths
-PROJECT_ROOT = '/Users/amlfreak/Desktop/venv'
+# Project paths (repo root = three levels above this file: dashboard → v2.8 → scripts → root)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 try:
     from dotenv import load_dotenv
@@ -981,7 +981,7 @@ class DeFiDashboard:
     def cleanup_lock_file(self):
         """Clean up the lock file for this dashboard"""
         try:
-            lock_dir = os.path.join('/Users/amlfreak/Desktop/venv/defi_dashboard_locks')
+            lock_dir = os.path.join(PROJECT_ROOT, 'defi_dashboard_locks')
             lock_file = os.path.join(lock_dir, 'main_dashboard.lock')
             
             if os.path.exists(lock_file):
@@ -1227,99 +1227,21 @@ class DeFiDashboard:
                     symbol = row.get('symbol', 'Unknown')
                     token_name = row.get('name', 'Unknown Token')
                     
-                    # Fix token names using address mapping
-                    address_mappings = {
-                        '0x3845badade8e6dff049820680d1f14bd3903a5d0': 'The Sandbox',
-                        '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'Aave',
-                        '0x3506424f91fd33084466f402d5d97f05f8e3b4af': 'Chiliz',
-                        '0xc00e94cb662c3520282e6f5717214004a7f26888': 'Compound',
-                        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USD Coin',
-                        '0xdac17f958d2ee523a2206206994597c13d831ec7': 'Tether USD',
-                        '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'Wrapped Bitcoin',
-                        '0x514910771af9ca656af840dff83e8264ecf986ca': 'Chainlink',
-                        '0x111111111117dc0aa78b770fa6a738034120c302': '1inch',
-                        '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'Polygon',
-                        '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'Uniswap',
-                        '0x6b175474e89094c44da98b954eedeac495271d0f': 'Dai',
-                        '0xc944e90c64b2c07662a292be6244bdf05cda44a7': 'The Graph',
-                        '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'Maker',
-                        '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2': 'SushiSwap',
-                        '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'Gala Games',
-                        '0x4a220e6096b25eadb88358cb44068a3248254675': 'Quant',
-                        '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'Decentraland',
-                        '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'Basic Attention Token',
-                        '0x4200000000000000000000000000000000000042': 'Optimism',
-                        '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRON'
-                    }
-                    
-                    # Fix symbol mappings
-                    symbol_mappings = {
-                        '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
-                        '0x3506424f91fd33084466f402d5d97f05f8e3b4af': 'CHZ',
-                        '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
-                        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
-                        '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
-                        '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
-                        '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
-                        '0x111111111117dc0aa78b770fa6a738034120c302': '1INCH',
-                        '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'POL',
-                        '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
-                        '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
-                        '0xc944e90c64b2c07662a292be6244bdf05cda44a7': 'GRT',
-                        '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'MKR',
-                        '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2': 'SUSHI',
-                        '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'GALA',
-                        '0x4a220e6096b25eadb88358cb44068a3248254675': 'QNT',
-                        '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'MANA',
-                        '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'BAT',
-                        '0x4200000000000000000000000000000000000042': 'OP',
-                        '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRX'
-                    }
-                    
-                    # Fix token name and symbol using external mappings
+                    # Resolve name/symbol from tokens.csv / token_mappings (no hardcoded addresses).
                     if token_address:
-                        token_name = get_token_name(token_address)
-                        symbol = get_token_symbol(token_address)
+                        tm = self._cached_token_manager()
+                        if tm:
+                            token_name = tm.get_token_name(token_address)
+                            symbol = tm.get_token_symbol(token_address)
+                        else:
+                            taddr = str(token_address).strip()
+                            key = taddr.lower() if taddr.startswith('0x') else taddr
+                            token_name = get_token_name(key)
+                            symbol = get_token_symbol(key)
                         if token_name != 'Unknown Token':
                             print(f"      ✅ Fixed token name: {token_name}")
-                        if symbol != 'Unknown':
+                        if symbol != 'Unknown' and str(symbol).upper() != 'UNKNOWN':
                             print(f"      ✅ Fixed symbol: {symbol}")
-                    
-                    # Special SAND token fix
-                    if token_address and '3845bad' in token_address.lower():
-                        symbol = 'SAND'
-                        token_name = 'The Sandbox'
-                        print(f"      ✅ SAND token corrected: {token_address} -> SAND")
-                    
-                    # Additional token name fixes for specific tokens
-                    if token_name == 'Unknown Token' and token_address:
-                        additional_names = {
-                            '0x4200000000000000000000000000000000000042': 'Optimism',
-                            '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRON',
-                            '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'Gala Games',
-                            '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'Decentraland',
-                            '0x4a220e6096b25eadb88358cb44068a3248254675': 'Quant',
-                            '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'Polygon',
-                            '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'Uniswap'
-                        }
-                        if token_address.lower() in additional_names:
-                            token_name = additional_names[token_address.lower()]
-                            print(f"      🔍 Token name corrected: {token_address} -> {token_name}")
-                    
-                    # Additional symbol fixes for specific tokens
-                    if symbol == 'Unknown' and token_address:
-                        additional_symbols = {
-                            '0x4200000000000000000000000000000000000042': 'OP',
-                            '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRX',
-                            '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'GALA',
-                            '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'MANA',
-                            '0x4a220e6096b25eadb88358cb44068a3248254675': 'QNT',
-                            '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'POL',
-                            '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI'
-                        }
-                        if token_address.lower() in additional_symbols:
-                            symbol = additional_symbols[token_address.lower()]
-                            print(f"      🔍 Symbol corrected: {token_address} -> {symbol}")
                     
                     # Simple data extraction - just get what's in the CSV
                     market_cap = 0
@@ -1804,10 +1726,18 @@ class DeFiDashboard:
     def _get_token_chain(self, token_address, token_info):
         """Determine the correct blockchain for a token"""
         try:
-            # Check for L2 tokens first
-            if token_address.lower() == '0x4200000000000000000000000000000000000042':
-                return 'optimism'  # OP token
-            
+            tm = self._cached_token_manager()
+            if tm and token_address:
+                try:
+                    from token_list_registry import normalize_registry_chain
+                    meta = tm.get_token_by_address(token_address)
+                    if meta:
+                        nk = normalize_registry_chain(meta.get('chain', ''))
+                        if nk == 'op':
+                            return 'optimism'
+                except Exception:
+                    pass
+
             # Check onchain_data sources for chain information
             onchain_data = token_info.get('onchain_data', {})
             for source, data in onchain_data.items():
@@ -2089,66 +2019,22 @@ class DeFiDashboard:
                     if not token_address and 'token' in str(row.index).lower():
                         token_address = row.get('token', '')
                         if not symbol or symbol == 'Unknown':
-                            symbol = 'Unknown'  # Will be corrected by address mapping
-                        # Try to get token name from address mapping
-                        if token_address:
-                            address_name_mappings = {
-                                '0x3845badade8e6dff049820680d1f14bd3903a5d0': 'The Sandbox',
-                                '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'Aave',
-                                '0x3506424f91fd33084466f402d5d97f05f8e3b4af': 'Chiliz',
-                                '0xc00e94cb662c3520282e6f5717214004a7f26888': 'Compound',
-                                '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USD Coin',
-                                '0xdac17f958d2ee523a2206206994597c13d831ec7': 'Tether',
-                                '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'Wrapped Bitcoin',
-                                '0x514910771af9ca656af840dff83e8264ecf986ca': 'Chainlink',
-                                '0x111111111117dc0aa78b770fa6a738034120c302': '1inch',
-                                '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'Polygon',
-                                '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'Uniswap',
-                                '0x6b175474e89094c44da98b954eedeac495271d0f': 'Dai',
-                                '0xc944e90c64b2c07662a292be6244bdf05cda44a7': 'The Graph',
-                                '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'Maker',
-                                '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2': 'SushiSwap',
-                                '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'Gala',
-                                '0x4a220e6096b25eadb88358cb44068a3248254675': 'Quant',
-                                '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'Decentraland',
-                                '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'Basic Attention Token',
-                                '0x4200000000000000000000000000000000000042': 'Optimism',
-                                '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRON'
-                            }
-                            if token_address.lower() in address_name_mappings:
-                                token_name = address_name_mappings[token_address.lower()]
-                    
-                    # Address-based symbol correction
+                            symbol = 'Unknown'
+
                     if token_address:
-                        # Special SAND token fix
-                        if '3845bad' in token_address.lower():
-                            symbol = 'SAND'
-                            print(f"      ✅ SAND token corrected: {token_address} -> SAND")
+                        tm = self._cached_token_manager()
+                        if tm:
+                            tn = tm.get_token_name(token_address)
+                            sn = tm.get_token_symbol(token_address)
+                            if tn and tn != 'Unknown Token':
+                                token_name = tn
+                            if sn and str(sn).upper() != 'UNKNOWN':
+                                symbol = sn
                         else:
-                            address_mappings = {
-                                '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
-                                '0x3506424f91fd33084466f402d5d97f05f8e3b4af': 'CHZ',
-                                '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
-                                '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
-                                '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
-                                '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
-                                '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
-                                '0x111111111117dc0aa78b770fa6a738034120c302': '1INCH',
-                                '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'POL',
-                                '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
-                                '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
-                                '0xc944e90c64b2c07662a292be6244bdf05cda44a7': 'GRT',
-                                '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'MKR',
-                                '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2': 'SUSHI',
-                                '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'GALA',
-                                '0x4a220e6096b25eadb88358cb44068a3248254675': 'QNT',
-                                '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'MANA',
-                                '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'BAT',
-                                '0x4200000000000000000000000000000000000042': 'OP',
-                                '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRX'
-                            }
-                            if token_address.lower() in address_mappings:
-                                symbol = address_mappings[token_address.lower()]
+                            taddr = str(token_address).strip()
+                            key = taddr.lower() if taddr.startswith('0x') else taddr
+                            token_name = get_token_name(key)
+                            symbol = get_token_symbol(key)
                     
                     # Extract data from Excel columns (try Excel format first, then fallback)
                     # Excel format: 'Market Cap', 'Volume 24h', 'Holders', 'Liquidity'
@@ -2471,7 +2357,20 @@ class DeFiDashboard:
             self.add_log_entry(f"↕️ Sorted Token Data Viewer by {column_name} ({direction})", "info")
         except Exception as e:
             self.add_log_entry(f"❌ Sort error on {column_name}: {e}", "error")
-    
+
+    def _cached_token_manager(self):
+        """Lazy TokenManager (tokens.csv) for address→name/symbol without hardcoded contracts."""
+        if getattr(self, '_hodler_tm_loaded', False):
+            return getattr(self, '_hodler_token_manager', None)
+        self._hodler_tm_loaded = True
+        try:
+            from centralized_token_manager import TokenManager
+            self._hodler_token_manager = TokenManager()
+        except Exception as exc:
+            print(f"      ⚠️ TokenManager unavailable: {exc}")
+            self._hodler_token_manager = None
+        return self._hodler_token_manager
+
     def _safe_get_value(self, row, possible_keys, default=None):
         """Safely get value from row trying multiple possible key names"""
         import pandas as pd
@@ -3378,13 +3277,21 @@ class DeFiDashboard:
         """Correct symbol based on token address using external mappings"""
         if not token_address:
             return current_symbol
-            
-        # Use external token mappings
-        corrected_symbol = get_token_symbol(token_address)
+
+        tm = self._cached_token_manager()
+        if tm:
+            corrected_symbol = tm.get_token_symbol(token_address)
+            if corrected_symbol and str(corrected_symbol).upper() != 'UNKNOWN':
+                print(f"      ✅ Symbol corrected from address: {token_address} -> {corrected_symbol}")
+                return corrected_symbol
+
+        taddr = str(token_address).strip()
+        key = taddr.lower() if taddr.startswith('0x') else taddr
+        corrected_symbol = get_token_symbol(key)
         if corrected_symbol and corrected_symbol != 'Unknown':
             print(f"      ✅ Symbol corrected from address: {token_address} -> {corrected_symbol}")
             return corrected_symbol
-        
+
         return current_symbol
     
     def _extract_token_name(self, row):
@@ -3392,40 +3299,21 @@ class DeFiDashboard:
         # Address-based token identification (highest priority)
         token_address = row.get('token_address', '') or row.get('token', '')
         if token_address:
-            # Use external token mappings for address-based identification
+            tm = self._cached_token_manager()
+            if tm:
+                token_name = tm.get_token_name(token_address)
+                if token_name and token_name != 'Unknown Token':
+                    return token_name
             try:
-                from token_mappings import get_token_name
-                token_name = get_token_name(token_address)
+                from token_mappings import get_token_name as _gtn
+
+                taddr = str(token_address).strip()
+                key = taddr.lower() if taddr.startswith('0x') else taddr
+                token_name = _gtn(key)
                 if token_name != 'Unknown Token':
                     return token_name
             except ImportError:
-                # Fallback to hardcoded mappings if external file not available
-                address_name_mappings = {
-                    '0x3845badade8e6dff049820680d1f14bd3903a5d0': 'The Sandbox',
-                    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'Aave',
-                    '0x3506424f91fd33084466f402d5d97f05f8e3b4af': 'Chiliz',
-                    '0xc00e94cb662c3520282e6f5717214004a7f26888': 'Compound',
-                    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USD Coin',
-                    '0xdac17f958d2ee523a2206206994597c13d831ec7': 'Tether',
-                    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'Wrapped Bitcoin',
-                    '0x514910771af9ca656af840dff83e8264ecf986ca': 'Chainlink',
-                    '0x111111111117dc0aa78b770fa6a738034120c302': '1inch',
-                    '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'Polygon',
-                    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'Uniswap',
-                    '0x6b175474e89094c44da98b954eedeac495271d0f': 'Dai',
-                    '0xc944e90c64b2c07662a292be6244bdf05cda44a7': 'The Graph',
-                    '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'Maker',
-                    '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2': 'SushiSwap',
-                    '0xd1d2eb1b1e90b638588728b4130137d262c87cae': 'Gala',
-                    '0x4a220e6096b25eadb88358cb44068a3248254675': 'Quant',
-                    '0x0f5d2fb29fb7d3cfee444a200298f468908cc942': 'Decentraland',
-                    '0x0d8775f648430679a709e98d2b0cb6250d2887ef': 'Basic Attention Token',
-                    '0x4200000000000000000000000000000000000042': 'Optimism',
-                    '0x50327c6c5a14dcade707abad2e27eb517df87ab5': 'TRON'
-                }
-                
-                if token_address.lower() in address_name_mappings:
-                    return address_name_mappings[token_address.lower()]
+                pass
         
         # Try to extract from name field
         name = row.get('name', '')

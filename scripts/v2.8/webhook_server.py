@@ -126,12 +126,12 @@ import requests
 # Add project root to path
 # Priority:
 # 1) explicit PROJECT_ROOT env var
-# 2) auto-detect from this file location (.../scripts/v2.0/webhook_server.py -> .../)
+# 2) auto-detect from this file location (.../scripts/v2.8/webhook_server.py -> repo root)
 PROJECT_ROOT = os.getenv('PROJECT_ROOT')
 if not PROJECT_ROOT:
     PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.append(PROJECT_ROOT)
-V2_SCRIPT_DIR = os.path.join(PROJECT_ROOT, 'scripts', 'v2.0')
+V2_SCRIPT_DIR = os.path.join(PROJECT_ROOT, 'scripts', 'v2.8')
 TOKEN_MAPPINGS_GENERATOR = os.path.join(V2_SCRIPT_DIR, 'generate_token_mappings.py')
 if V2_SCRIPT_DIR not in sys.path:
     sys.path.append(V2_SCRIPT_DIR)
@@ -2285,9 +2285,13 @@ class WebhookServer:
                 print(f"    ⚠️  Skipping 1inch for L2 token {token_address}")
                 return None
             
-            # Use USDC as destination token (most liquid)
-            usdc_address = '0xA0b86a33E6441b8c4C8B8C4C8C4C8C4C8C4C8C4C'  # USDC
-            
+            from token_list_registry import oneinch_dst_stable_for_chain
+
+            usdc_address = oneinch_dst_stable_for_chain('eth')
+            if not usdc_address:
+                print(f"    ⚠️  No USDC/USDT/DAI row for eth in tokens.csv; skipping 1inch")
+                return None
+
             url = f"https://api.1inch.com/swap/v6.0/1/quote"
             params = {
                 'src': token_address,
@@ -2940,42 +2944,31 @@ class WebhookServer:
         try:
             # Clean the token address (remove chain suffix like _eth, _polygon, etc.)
             clean_address = token_address.split('_')[0] if '_' in token_address else token_address
-            
-            # Enhanced symbol mapping with hardcoded fallbacks for known tokens
-            hardcoded_symbols = {
-                '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38': 'SONIC',  # New SONIC address
-                '0x4200000000000000000000000000000000000042': 'OP',    # Optimism
-                '0x455e53cbb86018ac2b8092fdcd39d8444affc3f6': 'POL',   # Polygon (ex-MATIC)
-            }
-            
-            # Check hardcoded symbols first
-            if clean_address in hardcoded_symbols:
-                symbol = hardcoded_symbols[clean_address]
-                print(f"  ✅ Found hardcoded symbol for {clean_address}: {symbol}")
-                return symbol
-            
-            # Try token mappings from v2.0
+            map_key = str(clean_address).strip()
+            if map_key.startswith('0x'):
+                map_key = map_key.lower()
+
+            # Try token_mappings (generated from tokens.csv)
             try:
                 get_token_symbol = self._load_token_mapping_resolver('get_token_symbol')
                 if callable(get_token_symbol):
-                    symbol = get_token_symbol(clean_address)
+                    symbol = get_token_symbol(map_key)
                     if symbol and symbol != 'Unknown':
                         print(f"  ✅ Found symbol for {clean_address}: {symbol}")
                         return symbol
             except Exception as e:
                 print(f"  ⚠️  Token mappings import failed: {e}")
             
-            # Try to get symbol from tokens.csv as last resort
+            # Last resort: tokens.csv via TokenManager (handles column renames)
             try:
-                csv_file = os.path.join(DATA_DIR, 'tokens.csv')
-                if os.path.exists(csv_file):
-                    import pandas as pd
-                    df = pd.read_csv(csv_file)
-                    token_row = df[df['address'] == clean_address]
-                    if not token_row.empty:
-                        symbol = token_row.iloc[0]['symbol']
-                        print(f"  ✅ Found symbol from tokens.csv for {clean_address}: {symbol}")
-                        return symbol
+                from centralized_token_manager import TokenManager
+
+                tm = TokenManager()
+                token_row = tm.get_token_by_address(clean_address)
+                if token_row and token_row.get('symbol'):
+                    symbol = token_row['symbol']
+                    print(f"  ✅ Found symbol from tokens.csv for {clean_address}: {symbol}")
+                    return symbol
             except Exception as e:
                 print(f"  ⚠️  CSV lookup failed: {e}")
             
@@ -3165,25 +3158,34 @@ class WebhookServer:
         return None
     
     def _is_l2_token(self, token_address):
-        """Check if token is on L2 (Optimism, Polygon, etc.)"""
-        # Known L2 token addresses
-        l2_tokens = {
-            '0x4200000000000000000000000000000000000042': 'optimism',  # OP
-            '0x7f5c764cbc14f9669b88837ca1490cca17c31607': 'optimism',  # USDC on Optimism
-            '0x94b008aa00579c1307b0ef2c499ad98a8ce58e58': 'optimism',  # USDT on Optimism
-            '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': 'optimism',  # DAI on Optimism
-        }
-        return token_address.lower() in l2_tokens
-    
+        """True when tokens.csv declares this contract on a non-eth chain (skip Ethereum L1-only probes)."""
+        try:
+            from token_list_registry import registry_declared_chains_for_address
+
+            declared = registry_declared_chains_for_address(str(token_address or '').strip())
+            if not declared:
+                return False
+            return any(c != 'eth' for c in declared)
+        except Exception:
+            return False
+
     def _get_l2_chain(self, token_address):
-        """Get the L2 chain for a token"""
-        l2_tokens = {
-            '0x4200000000000000000000000000000000000042': 'optimism',
-            '0x7f5c764cbc14f9669b88837ca1490cca17c31607': 'optimism',
-            '0x94b008aa00579c1307b0ef2c499ad98a8ce58e58': 'optimism',
-            '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': 'optimism',
-        }
-        return l2_tokens.get(token_address.lower())
+        """Return a coarse L2 hint from tokens.csv (Optimism first for legacy callers)."""
+        try:
+            from token_list_registry import registry_declared_chains_for_address
+
+            declared = registry_declared_chains_for_address(str(token_address or '').strip())
+            if 'op' in declared:
+                return 'optimism'
+            if 'arbitrum' in declared:
+                return 'arbitrum'
+            if 'polygon' in declared:
+                return 'polygon'
+            if 'base' in declared:
+                return 'base'
+        except Exception:
+            pass
+        return None
     
     def fetch_etherscan_data(self, token_address, chain='eth'):
         """Fetch real data from Etherscan API"""
