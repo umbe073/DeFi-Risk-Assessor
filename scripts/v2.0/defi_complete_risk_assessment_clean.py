@@ -3615,20 +3615,14 @@ def _load_request_policy_settings():
 
 
 def _http_state_request_key(url, params=None):
-    """Build stable request key for conditional request metadata."""
+    """Stable key for conditional GET metadata (no raw query secrets on disk)."""
     base = str(url or '').strip()
     if not base:
         return ''
     if not params:
         return base
-    try:
-        if isinstance(params, dict):
-            encoded = urlencode(sorted((str(k), str(v)) for k, v in params.items()), doseq=True)
-        else:
-            encoded = str(params)
-    except Exception:
-        encoded = str(params)
-    return f"{base}?{encoded}" if encoded else base
+    safe = _cache_key_secret_safe_repr(params) if isinstance(params, dict) else str(params)
+    return hashlib.sha3_256(f'{base}|{safe}'.encode('utf-8')).hexdigest()
 
 
 def _load_http_request_state():

@@ -234,13 +234,12 @@ def _verify_webhook_signature(payload: bytes) -> tuple[bool, str]:
         return False, 'stale_signature'
 
     signed_payload = f'{timestamp_int}.'.encode('utf-8') + (payload or b'')
-    expected = 'sha256=' + hmac.new(
-        WEBHOOK_SHARED_SECRET.encode('utf-8'),
-        signed_payload,
-        hashlib.sha256,
-    ).hexdigest()
-
-    if not hmac.compare_digest(expected.lower(), signature.lower()):
+    key = WEBHOOK_SHARED_SECRET.encode('utf-8')
+    expected = 'sha3_256=' + hmac.digest(key, signed_payload, 'sha3_256').hex()
+    sig_norm = signature.strip().lower()
+    if not sig_norm.startswith('sha3_256='):
+        return False, 'invalid_signature_scheme'
+    if not hmac.compare_digest(expected.lower(), sig_norm):
         return False, 'invalid_signature'
 
     return True, 'ok'

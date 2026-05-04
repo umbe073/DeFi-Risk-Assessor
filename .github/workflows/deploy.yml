@@ -42,23 +42,6 @@ jobs:
           ssh-keygen -y -P '' -f ~/.ssh/deploy_key >/dev/null
           ssh-keyscan -p "${DEPLOY_SSH_PORT:-22}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Deploy script to server
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            -p "${DEPLOY_PORT:-22}" \
-            -o StrictHostKeyChecking=no \
-            "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${{ secrets.DEPLOY_PATH }}/scripts/v2.8/deploy'"
-          scp -i ~/.ssh/deploy_key \
-            -P "${DEPLOY_PORT:-22}" \
-            -o StrictHostKeyChecking=no \
-            scripts/v2.8/deploy/auto_sync_and_deploy.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${{ secrets.DEPLOY_PATH }}/scripts/v2.8/deploy/auto_sync_and_deploy.sh"
-
       - name: Run remote deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -71,6 +54,7 @@ jobs:
           DEPLOY_HEALTH_URL_APP: ${{ secrets.DEPLOY_HEALTH_URL_APP }}
           DEPLOY_HEALTH_URL_SCRIPT: ${{ secrets.DEPLOY_HEALTH_URL_SCRIPT }}
         run: |
+          # auto_sync_and_deploy.sh must exist on the server (private ops; not in this repository).
           ssh -i ~/.ssh/deploy_key \
             -p "${DEPLOY_PORT:-22}" \
             -o StrictHostKeyChecking=no \

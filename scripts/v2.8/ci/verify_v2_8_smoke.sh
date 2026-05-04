@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# CI-safe smoke checks for scripts/v2.8 (no operational deploy tree in repo).
+
 ROOT_DIR="${1:-/opt/hodler-suite}"
 V2_DIR="${ROOT_DIR}/scripts/v2.8"
 

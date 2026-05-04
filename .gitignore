@@ -35,7 +35,7 @@ cleanup_data_cache.py
 # ── Secrets & credentials ─────────────────────────────────────────────────────
 .env
 .env.*
-!.env.example
+!/.env.example
 .secure_credentials
 .master_key
 *.pem
@@ -93,6 +93,14 @@ defi_dashboard_locks/
 !/scripts/v2.8/**
 /scripts/v2.8/web_portal/
 /scripts/v2.8/web_portal/**
+
+# Operational / manual-only — never publish (delete from remote; keep local/server copies).
+/scripts/v2.0/web_portal/
+/scripts/v2.0/web_portal/**
+/scripts/v2.0/deploy/
+/scripts/v2.0/deploy/**
+/scripts/v2.8/deploy/
+/scripts/v2.8/deploy/**
 
 # Additional hard blocks for secrets/runtime artifacts under v2.8.
 /scripts/v2.8/**/*.env
