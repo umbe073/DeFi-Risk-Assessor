@@ -1,10 +1,48 @@
 name: "CodeQL Config"
+
+# CodeQL scope for Hodler Suite.
+#
+# Only two trees are deployed in production:
+#   - scripts/v2.0/web_portal  (Flask web portal, manual deploy)
+#   - scripts/v2.8             (current engine, systemd service)
+#
+# We use `paths-ignore` only (CodeQL Python autobuild is unhappy with explicit
+# `paths:` filters on this repo). The ignore list keeps legacy versions, archived
+# scripts, vendored data, build/test fixtures, and the v2.0 desktop dashboard out
+# of analysis so the alert backlog stays focused on shipped surface.
+
 paths-ignore:
+  # Legacy / archived script trees we no longer ship.
+  - scripts/v0.1/**
+  - scripts/v0.5/**
+  - scripts/v1.0/**
+  - scripts/v1.2/**
+  - scripts/v1.3/**
+  - scripts/v1.4/**
+  - scripts/v1.5/**
+  # v2.0 non-portal surface (desktop GUIs, fixers, archives, tests, deploy scripts).
+  - scripts/v2.0/archive/**
+  - scripts/v2.0/dashboard/**
+  - scripts/v2.0/credential_management/**
+  - scripts/v2.0/fixes/**
+  - scripts/v2.0/tests/**
+  - scripts/v2.0/deploy/**
+  # v2.8 archived/obsolete + tests are not part of the deployed surface.
+  - scripts/v2.8/archive/**
+  - scripts/v2.8/tests/**
+  - scripts/v2.8/deploy/**
+  # Generic noise.
   - data/**
+  - logs/**
   - site/**
   - site_public/**
-  - logs/**
+  - docs/**
   - .cache/**
   - "**/__pycache__/**"
   - "**/*.db"
   - "**/.venv/**"
+  - "**/backup_*/**"
+  - "**/obsolete_scripts/**"
+
+queries:
+  - uses: security-and-quality
