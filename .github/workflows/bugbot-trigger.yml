@@ -1,0 +1,94 @@
+name: Bugbot Trigger
+
+# Workaround for Cursor Bugbot's automatic-review path getting stuck on
+# "Expected — Waiting for status to be reported". The manual comment trigger
+# (`bugbot run`) goes through a different path that has been more reliable.
+# We post it once when a PR opens / reopens / leaves draft, and once per push
+# if Bugbot has not posted a status yet for the new HEAD commit.
+#
+# Refs:
+#   https://cursor.com/docs/bugbot
+#   https://forum.cursor.com/t/bugbot-not-working-despite-github-app-reinstallation/150255
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+
+jobs:
+  trigger-bugbot:
+    name: Comment "bugbot run" on PR
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request != null && github.event.pull_request.draft == false }}
+    timeout-minutes: 3
+    steps:
+      - name: Decide whether to post trigger
+        id: gate
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const { PR_NUMBER, ACTION, HEAD_SHA } = process.env;
+            const prNumber = Number(PR_NUMBER);
+            const action = String(ACTION || '');
+
+            // Always trigger when a PR opens / reopens / becomes ready-for-review.
+            if (['opened', 'reopened', 'ready_for_review'].includes(action)) {
+              core.setOutput('post', 'true');
+              core.info(`Action ${action}: will post bugbot run on #${prNumber}.`);
+              return;
+            }
+
+            // For synchronize (new commit pushed), only re-trigger if Bugbot
+            // has not already reported a status for the new HEAD SHA.
+            const checks = await github.paginate(github.rest.checks.listForRef, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: HEAD_SHA,
+              per_page: 100,
+            });
+            const bugbot = checks.filter((c) =>
+              String(c.name || '').toLowerCase().includes('bugbot') ||
+              String(c.app?.slug || '').toLowerCase().includes('cursor')
+            );
+            const completed = bugbot.find((c) => c.status === 'completed');
+            if (completed) {
+              core.info(`Bugbot already completed on ${HEAD_SHA}; skipping comment.`);
+              core.setOutput('post', 'false');
+              return;
+            }
+            const inflight = bugbot.find((c) => c.status === 'in_progress' || c.status === 'queued');
+            if (inflight) {
+              core.info(`Bugbot already in_progress/queued on ${HEAD_SHA}; skipping comment.`);
+              core.setOutput('post', 'false');
+              return;
+            }
+            core.info(`No Bugbot status on ${HEAD_SHA}; will post bugbot run.`);
+            core.setOutput('post', 'true');
+
+      - name: Post bugbot run comment
+        if: steps.gate.outputs.post == 'true'
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        with:
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER);
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: 'bugbot run',
+            });
+            core.info(`Posted "bugbot run" on PR #${prNumber}.`);
