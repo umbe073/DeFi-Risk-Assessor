@@ -1,0 +1,33 @@
+# Repository gitleaks overrides (extends built-in rules from the gitleaks binary).
+# CI passes `--config "$GITHUB_WORKSPACE/.gitleaks.toml"` (see `.github/workflows/pr-check.yml`).
+
+title = "Hodler Suite – gitleaks"
+
+[extend]
+useDefault = true
+
+# Sidekiq/contribsys Bundle credentials are irrelevant for this Python codebase. The upstream
+# `sidekiq-secret` rule has produced CI-only hits on README paths (line/column metadata that do
+# not match the blobs served by the Git API for the same SHAs). Keep findings for real secrets
+# while neutralizing this Ruby-specific rule here.
+[[rules]]
+id = "sidekiq-secret"
+description = "Disabled for Hodler Suite (Python; no Sidekiq/contribsys deployment)."
+[rules.allowlist]
+paths = [
+  '''.*''',
+]
+
+# False positives: policy docs use words like "secret(s)" / "private key(s)" in prose, and
+# LICENSE lists a public licensing contact address (not a repository credential).
+[allowlist]
+regexes = [
+  '''(?i)never commit secrets''',
+  '''(?i)do not paste.*\bsecrets\b''',
+  '''(?i)treat support attachments''',
+  '''(?i)private keys''',
+  '''(?i)prefer HMAC/signature verification''',
+  '''(?i)confidential trade secrets''',
+  '''(?i)proprietary and confidential''',
+  '''(?i)legal@hodler-suite\.com''',
+]
